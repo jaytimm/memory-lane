@@ -2,6 +2,12 @@ name: Build portable Windows gallery search
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-windows-portable.yml"
+      - "src/**"
+      - "windows/**"
 
 permissions:
   contents: read
@@ -84,4 +90,3 @@ jobs:
           compression-level: 9
           retention-days: 14
           if-no-files-found: error
-
