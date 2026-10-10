@@ -88,6 +88,7 @@ jobs:
             -Path dist\* `
             -DestinationPath MemoryLane-Windows-x64.zip `
             -CompressionLevel Optimal
+          Copy-Item "windows\Start Memory Lane from USB.bat" .
 
       - name: Publish permanent Windows release
         shell: pwsh
@@ -101,11 +102,11 @@ jobs:
 
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag MemoryLane-Windows-x64.zip `
+            gh release upload $tag MemoryLane-Windows-x64.zip "Start Memory Lane from USB.bat" `
               --clobber `
               --repo $env:GITHUB_REPOSITORY
           } else {
-            gh release create $tag MemoryLane-Windows-x64.zip `
+            gh release create $tag MemoryLane-Windows-x64.zip "Start Memory Lane from USB.bat" `
               --title "Memory Lane for Windows" `
               --notes "Portable Windows launcher for the local semantic image gallery. User images, indexes, and model files are not included." `
               --repo $env:GITHUB_REPOSITORY
