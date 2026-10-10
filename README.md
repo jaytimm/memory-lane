@@ -1,17 +1,17 @@
 # Memory Lane
 
-Memory Lane is a local-first family photo gallery with album browsing and
-natural-language search.
+Memory Lane is a local-first image gallery with album browsing and semantic
+search.
 
-The repository contains the gallery builder and launchers. Family photographs,
-archive metadata, search indexes, and model files are not included.
+The repository contains the gallery builder and launchers. User images,
+metadata, search indexes, and model files are not included.
 
 ## Development
 
 Build a gallery:
 
 ```bash
-python3 -m src.build --input "/path/to/photos" --output ./FamilyPhotoArchive
+python3 -m src.build --input "/path/to/images" --output ./PhotoArchive
 ```
 
 Run the tests:
