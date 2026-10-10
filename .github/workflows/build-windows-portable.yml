@@ -72,7 +72,13 @@ jobs:
         shell: pwsh
         working-directory: dist/WindowsSearch
         run: |
-          .\runtime\python.exe -c "import torch, torchvision, open_clip, numpy; from src.serve import parse_search_request; assert parse_search_request({'query':'a parrot'})['query'] == 'a parrot'; print(torch.__version__, open_clip.__version__)"
+          $output = & .\runtime\python.exe -c "import torch, torchvision, open_clip, numpy; from src.serve import parse_search_request; assert parse_search_request({'query':'a parrot'})['query'] == 'a parrot'; print(torch.__version__, open_clip.__version__)" 2>&1
+          $output | Write-Host
+          if ($LASTEXITCODE -ne 0) {
+            $message = (($output | Out-String).Trim() -replace '%', '%25' -replace "`r", '%0D' -replace "`n", '%0A')
+            Write-Host "::error title=Portable runtime smoke test::$message"
+            exit 1
+          }
 
       - name: Upload portable Windows launcher
         uses: actions/upload-artifact@v4
