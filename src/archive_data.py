@@ -35,3 +35,17 @@ def read_search_index(archive: str | Path) -> tuple[dict, "object"]:
         raise ValueError("Semantic index metadata and embedding rows do not match")
     return metadata, embeddings
 
+
+def read_face_index(archive: str | Path) -> tuple[dict, "object"]:
+    import numpy as np
+
+    search_dir = Path(archive) / "search"
+    metadata_path = search_dir / "faces.json"
+    embeddings_path = search_dir / "faces.npy"
+    if not metadata_path.exists() or not embeddings_path.exists():
+        raise ValueError(f"Face index not found in {search_dir}")
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    embeddings = np.load(embeddings_path, allow_pickle=False)
+    if embeddings.ndim != 2 or embeddings.shape[0] != len(metadata.get("items", [])):
+        raise ValueError("Face index metadata and embedding rows do not match")
+    return metadata, embeddings

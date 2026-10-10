@@ -231,10 +231,40 @@ input, select, .quiet-button, .load-more {
 .viewer::backdrop { background: rgb(20 18 16 / 96%); }
 .viewer[open] { display: grid; place-items: center; }
 .viewer figure { margin: 0; max-width: min(1200px, 86vw); }
-.viewer figure img { display: block; max-width: 100%; max-height: calc(100vh - 125px); margin: auto; object-fit: contain; }
+.viewer-image-stage { position: relative; width: fit-content; margin: auto; }
+.viewer figure img { display: block; max-width: 100%; max-height: calc(100vh - 145px); margin: auto; object-fit: contain; }
 .viewer figcaption { display: flex; justify-content: space-between; gap: 25px; padding-top: 12px; font-family: system-ui, sans-serif; }
 .viewer figcaption span { display: block; color: #c9c2b9; font-size: .86rem; margin-top: 3px; }
 .viewer a { color: white; }
+.viewer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+.find-person {
+  min-height: 38px;
+  border: 1px solid #ffffff70;
+  border-radius: 7px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+.find-person:hover { background: #d05e3f; }
+.find-person:disabled { cursor: wait; opacity: .65; }
+.face-status { max-width: 260px; text-align: right; }
+.face-layer { position: absolute; inset: 0; pointer-events: none; }
+.face-choice {
+  position: absolute;
+  border: 3px solid #ffad78;
+  border-radius: 8px;
+  background: rgb(185 79 50 / 18%);
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 35%);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.face-choice:hover, .face-choice:focus-visible {
+  border-color: white;
+  background: rgb(185 79 50 / 42%);
+  outline: 3px solid var(--accent);
+}
 
 .viewer-close, .viewer-arrow {
   position: fixed;
@@ -258,4 +288,7 @@ input, select, .quiet-button, .load-more {
   .photo-grid { grid-template-columns: repeat(2, 1fr); }
   .viewer { padding: 42px 10px 25px; }
   .viewer-arrow { top: auto; bottom: 10px; }
+  .viewer figcaption { align-items: flex-start; }
+  .viewer-actions { align-items: flex-end; flex-direction: column; gap: 7px; }
+  .face-status { max-width: 180px; }
 }

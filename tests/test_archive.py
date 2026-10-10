@@ -12,8 +12,12 @@ from src.build import build_archive
 from src.embed import _existing_vectors, _save_partial
 from src.ingest import album_year_range, stable_image_id
 from src.metadata import match_records_to_folders, read_album_records
-from src.search import _candidate_indices, rank_embeddings
-from src.serve import parse_search_request
+from src.search import FaceSearchIndex, _candidate_indices, rank_embeddings
+from src.serve import (
+    parse_face_search_request,
+    parse_photo_faces_request,
+    parse_search_request,
+)
 
 
 class IngestTests(unittest.TestCase):
@@ -168,6 +172,38 @@ class SemanticRankingTests(unittest.TestCase):
             parse_search_request({"query": "  "})
         with self.assertRaisesRegex(ValueError, "year"):
             parse_search_request({"query": "dog", "date_to": "1990"})
+
+    def test_face_index_groups_results_by_photo(self):
+        import numpy as np
+
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = Path(temporary)
+            search = archive / "search"
+            search.mkdir()
+            items = [
+                {"id": "p1:0", "photo_id": "p1", "bbox": [0, 0, .2, .2], "detection_score": .9},
+                {"id": "p2:0", "photo_id": "p2", "bbox": [0, 0, .2, .2], "detection_score": .9},
+                {"id": "p2:1", "photo_id": "p2", "bbox": [.2, 0, .2, .2], "detection_score": .9},
+                {"id": "p3:0", "photo_id": "p3", "bbox": [0, 0, .2, .2], "detection_score": .9},
+            ]
+            (search / "faces.json").write_text(json.dumps({"items": items}))
+            np.save(
+                search / "faces.npy",
+                np.asarray([[1, 0], [.9, .1], [.7, .3], [0, 1]], dtype=np.float32),
+            )
+            photos = [{"id": "p1"}, {"id": "p2"}, {"id": "p3"}]
+            index = FaceSearchIndex(archive, photos)
+            results = index.search("p1:0", top_k=10)
+        self.assertEqual([result["id"] for result in results], ["p2", "p3"])
+        self.assertEqual(len(index.faces_for_photo("p2")), 2)
+
+    def test_face_request_validation(self):
+        self.assertEqual(parse_photo_faces_request({"photo_id": "abc"}), "abc")
+        self.assertEqual(parse_face_search_request({"face_id": "abc:0", "top_k": 500}), ("abc:0", 100))
+        with self.assertRaisesRegex(ValueError, "photo_id"):
+            parse_photo_faces_request({"photo_id": ""})
+        with self.assertRaisesRegex(ValueError, "integer"):
+            parse_face_search_request({"face_id": "abc:0", "top_k": True})
 
 
 if __name__ == "__main__":

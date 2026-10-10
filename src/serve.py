@@ -11,7 +11,7 @@ import sys
 from threading import Timer
 import webbrowser
 
-from .search import SemanticSearchEngine
+from .search import FaceSearchIndex, SemanticSearchEngine
 
 
 MAX_REQUEST_BYTES = 32_768
@@ -45,7 +45,32 @@ def parse_search_request(payload: object) -> dict:
     return parsed
 
 
-def make_handler(archive: Path, engine: SemanticSearchEngine):
+def parse_photo_faces_request(payload: object) -> str:
+    if not isinstance(payload, dict):
+        raise ValueError("Request body must be a JSON object")
+    photo_id = payload.get("photo_id")
+    if not isinstance(photo_id, str) or not photo_id or len(photo_id) > 200:
+        raise ValueError("A valid photo_id is required")
+    return photo_id
+
+
+def parse_face_search_request(payload: object) -> tuple[str, int]:
+    if not isinstance(payload, dict):
+        raise ValueError("Request body must be a JSON object")
+    face_id = payload.get("face_id")
+    if not isinstance(face_id, str) or not face_id or len(face_id) > 240:
+        raise ValueError("A valid face_id is required")
+    top_k = payload.get("top_k", 100)
+    if not isinstance(top_k, int) or isinstance(top_k, bool):
+        raise ValueError("top_k must be an integer")
+    return face_id, min(100, max(1, top_k))
+
+
+def make_handler(
+    archive: Path,
+    engine: SemanticSearchEngine,
+    face_index: FaceSearchIndex | None = None,
+):
     class GalleryHandler(SimpleHTTPRequestHandler):
         def log_message(self, format: str, *args) -> None:
             # Keep the family-facing launcher quiet; explicit startup/errors remain visible.
@@ -68,13 +93,15 @@ def make_handler(archive: Path, engine: SemanticSearchEngine):
                         "available": True,
                         "photo_count": engine.photo_count,
                         "model": engine.metadata["model"],
+                        "face_search": face_index is not None,
+                        "face_count": face_index.face_count if face_index else 0,
                     },
                 )
                 return
             super().do_GET()
 
         def do_POST(self) -> None:
-            if self.path != "/api/search":
+            if self.path not in ("/api/search", "/api/faces", "/api/face-search"):
                 self._json(404, {"error": "Not found"})
                 return
             try:
@@ -82,12 +109,23 @@ def make_handler(archive: Path, engine: SemanticSearchEngine):
                 if length < 1 or length > MAX_REQUEST_BYTES:
                     raise ValueError("Invalid request size")
                 payload = json.loads(self.rfile.read(length).decode("utf-8"))
-                request = parse_search_request(payload)
-                results = engine.search(**request)
-                self._json(
-                    200,
-                    {"query": request["query"], "count": len(results), "results": results},
-                )
+                if self.path == "/api/search":
+                    request = parse_search_request(payload)
+                    results = engine.search(**request)
+                    self._json(
+                        200,
+                        {"query": request["query"], "count": len(results), "results": results},
+                    )
+                elif face_index is None:
+                    self._json(404, {"error": "Face search is not available"})
+                elif self.path == "/api/faces":
+                    photo_id = parse_photo_faces_request(payload)
+                    faces = face_index.faces_for_photo(photo_id)
+                    self._json(200, {"photo_id": photo_id, "faces": faces})
+                else:
+                    face_id, top_k = parse_face_search_request(payload)
+                    results = face_index.search(face_id, top_k)
+                    self._json(200, {"count": len(results), "results": results})
             except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
                 self._json(400, {"error": str(error)})
             except Exception as error:
@@ -103,7 +141,12 @@ def serve(archive: Path, host: str, port: int, open_browser: bool = True) -> Non
         raise ValueError(f"Gallery not found: {archive}")
     print("Loading semantic search. This may take several seconds...", flush=True)
     engine = SemanticSearchEngine(archive)
-    server = ThreadingHTTPServer((host, port), make_handler(archive, engine))
+    try:
+        face_index = FaceSearchIndex(archive, engine.metadata["items"])
+        print(f"Loaded {face_index.face_count:,} indexed faces.", flush=True)
+    except (OSError, ValueError):
+        face_index = None
+    server = ThreadingHTTPServer((host, port), make_handler(archive, engine, face_index))
     actual_port = server.server_address[1]
     url = f"http://{host}:{actual_port}/"
     print(f"Family Photo Archive is ready: {url}", flush=True)

@@ -72,13 +72,20 @@
     <button id="close-viewer" class="viewer-close" type="button" aria-label="Close">×</button>
     <button id="previous-photo" class="viewer-arrow viewer-previous" type="button" aria-label="Previous photograph">‹</button>
     <figure>
-      <img id="viewer-image" alt="">
+      <div id="viewer-image-stage" class="viewer-image-stage">
+        <img id="viewer-image" alt="">
+        <div id="face-layer" class="face-layer"></div>
+      </div>
       <figcaption>
         <div>
           <strong id="viewer-title"></strong>
           <span id="viewer-album"></span>
         </div>
-        <a id="open-original" target="_blank" rel="noopener">Open original</a>
+        <div class="viewer-actions">
+          <span id="face-status" class="face-status" role="status"></span>
+          <button id="find-person" type="button" class="find-person" hidden>Find this person</button>
+          <a id="open-original" target="_blank" rel="noopener">Open original</a>
+        </div>
       </figcaption>
     </figure>
     <button id="next-photo" class="viewer-arrow viewer-next" type="button" aria-label="Next photograph">›</button>

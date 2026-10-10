@@ -1,0 +1,2 @@
+# Builder-only dependency. It is not included in the Windows gallery runtime.
+opencv-python-headless>=4.10,<5

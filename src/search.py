@@ -10,7 +10,7 @@ from threading import Lock
 
 import numpy as np
 
-from .archive_data import read_search_index
+from .archive_data import read_face_index, read_search_index
 from .clip_model import TEXT_PROMPT_TEMPLATE, load_clip, model_identity
 
 
@@ -98,6 +98,59 @@ class SemanticSearchEngine:
             }
             for index, score in ranked
         ]
+
+
+class FaceSearchIndex:
+    """Search precomputed face embeddings without loading a vision model."""
+
+    def __init__(self, archive: Path, photos: list[dict]):
+        self.metadata, self.embeddings = read_face_index(archive)
+        self._face_rows = {
+            item["id"]: index for index, item in enumerate(self.metadata["items"])
+        }
+        self._faces_by_photo: dict[str, list[dict]] = {}
+        for item in self.metadata["items"]:
+            self._faces_by_photo.setdefault(item["photo_id"], []).append(
+                {
+                    "id": item["id"],
+                    "bbox": item["bbox"],
+                    "detection_score": item["detection_score"],
+                }
+            )
+        self._photos = {photo["id"]: photo for photo in photos}
+
+    @property
+    def face_count(self) -> int:
+        return len(self.metadata["items"])
+
+    def faces_for_photo(self, photo_id: str) -> list[dict]:
+        return self._faces_by_photo.get(photo_id, [])
+
+    def search(self, face_id: str, top_k: int = 100) -> list[dict]:
+        if face_id not in self._face_rows:
+            raise ValueError("Face not found")
+        row = self._face_rows[face_id]
+        source_photo = self.metadata["items"][row]["photo_id"]
+        scores = self.embeddings @ self.embeddings[row]
+        ranked_rows = np.argsort(scores)[::-1]
+        results: list[dict] = []
+        seen_photos = {source_photo}
+        for candidate_row in ranked_rows:
+            face = self.metadata["items"][int(candidate_row)]
+            photo_id = face["photo_id"]
+            if photo_id in seen_photos or photo_id not in self._photos:
+                continue
+            seen_photos.add(photo_id)
+            results.append(
+                {
+                    **self._photos[photo_id],
+                    "score": round(float(scores[candidate_row]), 6),
+                    "matched_face": face["bbox"],
+                }
+            )
+            if len(results) >= top_k:
+                break
+        return results
 
 
 def search_index(

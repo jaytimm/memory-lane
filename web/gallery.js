@@ -23,6 +23,9 @@
     loadMore: document.querySelector("#load-more"),
     viewer: document.querySelector("#viewer"),
     viewerImage: document.querySelector("#viewer-image"),
+    faceLayer: document.querySelector("#face-layer"),
+    faceStatus: document.querySelector("#face-status"),
+    findPerson: document.querySelector("#find-person"),
     viewerTitle: document.querySelector("#viewer-title"),
     viewerAlbum: document.querySelector("#viewer-album"),
     original: document.querySelector("#open-original"),
@@ -33,6 +36,8 @@
   let viewerIndex = -1;
   let semanticPhotos = null;
   let semanticQuery = "";
+  let semanticDescription = "";
+  let faceSearchAvailable = false;
   const photosById = new Map(data.photos.map((photo) => [photo.id, photo]));
 
   function plural(number, word) {
@@ -118,6 +123,10 @@
     elements.viewerImage.alt = photo.filename;
     elements.viewerTitle.textContent = photo.filename;
     elements.viewerAlbum.textContent = album.title;
+    elements.faceLayer.replaceChildren();
+    elements.faceStatus.textContent = "";
+    elements.findPerson.disabled = false;
+    elements.findPerson.hidden = !faceSearchAvailable;
     if (photo.original) {
       elements.original.href = photo.original;
       elements.original.hidden = false;
@@ -133,7 +142,7 @@
     const selectedAlbum = albums.get(elements.albumFilter.value);
     const selectedDecade = elements.decadeFilter.value;
     elements.albumLabel.textContent = semanticQuery ? `Search: ${semanticQuery}` : (selectedAlbum ? selectedAlbum.title : (selectedDecade ? `${selectedDecade}s` : "All albums"));
-    elements.description.textContent = semanticQuery ? "Ranked by visual similarity." : (selectedAlbum ? selectedAlbum.description : "");
+    elements.description.textContent = semanticQuery ? semanticDescription : (selectedAlbum ? selectedAlbum.description : "");
     elements.count.textContent = plural(filteredPhotos.length, "photograph");
     elements.empty.hidden = filteredPhotos.length !== 0;
     elements.loadMore.hidden = shown >= filteredPhotos.length;
@@ -183,6 +192,7 @@
   function clearSemanticResults(clearInput = false) {
     semanticPhotos = null;
     semanticQuery = "";
+    semanticDescription = "";
     if (clearInput && elements.semanticQuery) elements.semanticQuery.value = "";
     if (elements.semanticStatus) {
       elements.semanticStatus.textContent = "Search looks at the photographs themselves.";
@@ -197,6 +207,7 @@
       const status = await response.json();
       if (!status.available) return;
       elements.semanticForm.hidden = false;
+      faceSearchAvailable = Boolean(status.face_search);
       elements.semanticStatus.textContent = `Ready to search ${status.photo_count.toLocaleString()} photographs.`;
     } catch (_) {
       // Direct file:// browsing intentionally keeps semantic controls hidden.
@@ -227,6 +238,7 @@
       if (!response.ok) throw new Error(payload.error || "Search failed");
       semanticPhotos = payload.results.map((result) => photosById.get(result.id)).filter(Boolean);
       semanticQuery = query;
+      semanticDescription = "Ranked by visual similarity.";
       shown = PAGE_SIZE;
       elements.semanticStatus.textContent = `${plural(semanticPhotos.length, "result")} ranked by visual similarity.`;
       render();
@@ -236,6 +248,75 @@
       elements.semanticStatus.classList.add("error");
     } finally {
       elements.semanticSubmit.disabled = false;
+    }
+  });
+
+  async function searchForFace(faceId) {
+    elements.findPerson.disabled = true;
+    elements.faceLayer.replaceChildren();
+    elements.faceStatus.textContent = "Finding this person…";
+    try {
+      const response = await fetch("/api/face-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ face_id: faceId, top_k: 100 }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Face search failed");
+      semanticPhotos = payload.results.map((result) => photosById.get(result.id)).filter(Boolean);
+      semanticQuery = "This person";
+      semanticDescription = "Ranked by face similarity.";
+      shown = PAGE_SIZE;
+      elements.viewer.close();
+      render();
+      document.querySelector("#photos-heading").scrollIntoView({ behavior: "smooth" });
+    } catch (error) {
+      elements.faceStatus.textContent = error.message || "Face search failed";
+      elements.findPerson.disabled = false;
+    }
+  }
+
+  elements.findPerson.addEventListener("click", async () => {
+    const photo = filteredPhotos[viewerIndex];
+    if (!photo) return;
+    elements.findPerson.disabled = true;
+    elements.faceLayer.replaceChildren();
+    elements.faceStatus.textContent = "Looking for faces…";
+    try {
+      const response = await fetch("/api/faces", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photo_id: photo.id }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Could not load faces");
+      if (!payload.faces.length) {
+        elements.faceStatus.textContent = "No clear face was found in this photograph.";
+        elements.findPerson.disabled = false;
+        return;
+      }
+      if (payload.faces.length === 1) {
+        await searchForFace(payload.faces[0].id);
+        return;
+      }
+      payload.faces.forEach((face, index) => {
+        const [x, y, width, height] = face.bbox;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "face-choice";
+        button.setAttribute("aria-label", `Find person ${index + 1}`);
+        button.style.left = `${x * 100}%`;
+        button.style.top = `${y * 100}%`;
+        button.style.width = `${width * 100}%`;
+        button.style.height = `${height * 100}%`;
+        button.addEventListener("click", () => searchForFace(face.id));
+        elements.faceLayer.append(button);
+      });
+      elements.faceStatus.textContent = "Choose a face in the photograph.";
+      elements.findPerson.disabled = false;
+    } catch (error) {
+      elements.faceStatus.textContent = error.message || "Could not load faces";
+      elements.findPerson.disabled = false;
     }
   });
   document.querySelector("#close-viewer").addEventListener("click", () => elements.viewer.close());
