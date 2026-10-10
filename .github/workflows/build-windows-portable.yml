@@ -21,12 +21,6 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v5
 
-      - name: Set up build Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.12.6"
-          architecture: x64
-
       - name: Create portable Python runtime
         shell: pwsh
         run: |
@@ -48,23 +42,21 @@ jobs:
             "import site"
           ) | Set-Content -Encoding ASCII (Join-Path $runtime "python312._pth")
 
+          $getPip = Join-Path $env:RUNNER_TEMP "get-pip.py"
+          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $getPip
+          & (Join-Path $runtime "python.exe") $getPip
+
       - name: Install CPU inference dependencies
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $packages = Join-Path $PWD "dist\WindowsSearch\runtime\Lib\site-packages"
-          python -m pip install --upgrade pip
-          python -m pip install `
-            --target $packages `
+          $python = Join-Path $PWD "dist\WindowsSearch\runtime\python.exe"
+          & $python -m pip install `
             --index-url https://download.pytorch.org/whl/cpu `
-            torch==2.9.1 torchvision==0.24.1
-          python -m pip install `
-            --target $packages `
             --no-deps `
+            torch==2.9.1 torchvision==0.24.1
+          & $python -m pip install `
             open_clip_torch==3.3.0 timm==1.0.30
-          python -m pip install `
-            --target $packages `
-            regex ftfy tqdm huggingface-hub safetensors pyyaml
 
       - name: Add launcher source
         shell: pwsh
