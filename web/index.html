@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Family Photo Archive</title>
+  <link rel="stylesheet" href="assets/gallery.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-copy">
+      <p class="eyebrow">Our family collection</p>
+      <h1>Family Photo Archive</h1>
+      <p id="collection-summary" class="collection-summary"></p>
+    </div>
+    <div id="hero-strip" class="hero-strip" aria-hidden="true"></div>
+  </header>
+
+  <main>
+    <section class="controls" aria-label="Browse photographs">
+      <form id="semantic-search-form" class="semantic-search" hidden>
+        <label>
+          <span>Search photographs</span>
+          <span class="search-input-row">
+            <input id="semantic-query" type="search" autocomplete="off" placeholder="Describe what is in the photo — for example, a parrot">
+            <button id="semantic-submit" type="submit">Search</button>
+          </span>
+        </label>
+        <p id="semantic-status" class="semantic-status">Search looks at the photographs themselves.</p>
+      </form>
+      <div class="control-intro">
+        <p class="eyebrow">Jump to</p>
+        <p>Choose an album or a decade.</p>
+      </div>
+      <label>
+        <span>Browse by album</span>
+        <select id="album-filter"><option value="">All albums</option></select>
+      </label>
+      <label>
+        <span>Browse by decade</span>
+        <select id="decade-filter"><option value="">All years</option></select>
+      </label>
+      <button id="clear-filters" type="button" class="quiet-button">Show everything</button>
+    </section>
+
+    <section aria-labelledby="albums-heading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Browse</p>
+          <h2 id="albums-heading">Albums</h2>
+        </div>
+      </div>
+      <div id="album-list" class="album-list"></div>
+    </section>
+
+    <section aria-labelledby="photos-heading">
+      <div class="section-heading photo-heading">
+        <div>
+          <p class="eyebrow" id="active-album-label">All albums</p>
+          <h2 id="photos-heading">Photographs</h2>
+          <p id="active-description" class="album-description"></p>
+        </div>
+        <p id="result-count" class="result-count"></p>
+      </div>
+      <div id="photo-grid" class="photo-grid"></div>
+      <p id="empty-state" class="empty-state" hidden>No photographs match those filters.</p>
+      <button id="load-more" type="button" class="load-more" hidden>Show more photographs</button>
+    </section>
+  </main>
+
+  <dialog id="viewer" class="viewer">
+    <button id="close-viewer" class="viewer-close" type="button" aria-label="Close">×</button>
+    <button id="previous-photo" class="viewer-arrow viewer-previous" type="button" aria-label="Previous photograph">‹</button>
+    <figure>
+      <img id="viewer-image" alt="">
+      <figcaption>
+        <div>
+          <strong id="viewer-title"></strong>
+          <span id="viewer-album"></span>
+        </div>
+        <a id="open-original" target="_blank" rel="noopener">Open original</a>
+      </figcaption>
+    </figure>
+    <button id="next-photo" class="viewer-arrow viewer-next" type="button" aria-label="Next photograph">›</button>
+  </dialog>
+
+  <script src="assets/manifest.js"></script>
+  <script src="assets/gallery.js"></script>
+</body>
+</html>

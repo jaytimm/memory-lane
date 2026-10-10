@@ -1,0 +1,6 @@
+# Install torch/torchvision from the CPU wheel index first; see README.md.
+torch==2.9.1
+torchvision==0.24.1
+open_clip_torch==3.3.0
+numpy>=2.0,<3
+

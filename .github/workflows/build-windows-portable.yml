@@ -1,0 +1,87 @@
+name: Build portable Windows gallery search
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up build Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12.6"
+          architecture: x64
+
+      - name: Create portable Python runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $runtime = Join-Path $PWD "dist\WindowsSearch\runtime"
+          $packages = Join-Path $runtime "Lib\site-packages"
+          New-Item -ItemType Directory -Force -Path $packages | Out-Null
+
+          $pythonZip = Join-Path $env:RUNNER_TEMP "python-embed.zip"
+          Invoke-WebRequest `
+            -Uri "https://www.python.org/ftp/python/3.12.6/python-3.12.6-embeddable-amd64.zip" `
+            -OutFile $pythonZip
+          Expand-Archive -Path $pythonZip -DestinationPath $runtime
+
+          @(
+            "python312.zip"
+            "."
+            "Lib\site-packages"
+            "import site"
+          ) | Set-Content -Encoding ASCII (Join-Path $runtime "python312._pth")
+
+      - name: Install CPU inference dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $packages = Join-Path $PWD "dist\WindowsSearch\runtime\Lib\site-packages"
+          python -m pip install --upgrade pip
+          python -m pip install `
+            --target $packages `
+            --index-url https://download.pytorch.org/whl/cpu `
+            torch==2.9.1 torchvision==0.24.1
+          python -m pip install `
+            --target $packages `
+            --no-deps `
+            open_clip_torch==3.3.0 timm==1.0.30
+          python -m pip install `
+            --target $packages `
+            regex ftfy tqdm huggingface-hub safetensors pyyaml
+
+      - name: Add launcher source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $destination = Join-Path $PWD "dist\WindowsSearch\src"
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          Copy-Item src\__init__.py,src\archive_data.py,src\clip_model.py,src\search.py,src\serve.py $destination
+          Copy-Item "windows\Start Family Gallery.bat" "dist\Start Family Gallery.bat"
+          Copy-Item "windows\README-WINDOWS.txt" "dist\README-WINDOWS.txt"
+
+      - name: Smoke-test portable runtime
+        shell: pwsh
+        working-directory: dist/WindowsSearch
+        run: |
+          .\runtime\python.exe -c "import torch, torchvision, open_clip, numpy; from src.serve import parse_search_request; assert parse_search_request({'query':'a parrot'})['query'] == 'a parrot'; print(torch.__version__, open_clip.__version__)"
+
+      - name: Upload portable Windows launcher
+        uses: actions/upload-artifact@v4
+        with:
+          name: FamilyGallery-Windows-x64
+          path: dist/
+          compression-level: 9
+          retention-days: 14
+          if-no-files-found: error
+
