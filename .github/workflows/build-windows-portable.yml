@@ -38,6 +38,7 @@ jobs:
           @(
             "python312.zip"
             "."
+            ".."
             "Lib\site-packages"
             "import site"
           ) | Set-Content -Encoding ASCII (Join-Path $runtime "python312._pth")
