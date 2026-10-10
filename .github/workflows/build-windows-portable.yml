@@ -10,7 +10,7 @@ on:
       - "windows/**"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -81,11 +81,32 @@ jobs:
             exit 1
           }
 
-      - name: Upload portable Windows launcher
-        uses: actions/upload-artifact@v4
-        with:
-          name: FamilyGallery-Windows-x64
-          path: dist/
-          compression-level: 9
-          retention-days: 14
-          if-no-files-found: error
+      - name: Package Windows release
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path dist\* `
+            -DestinationPath MemoryLane-Windows-x64.zip `
+            -CompressionLevel Optimal
+
+      - name: Publish permanent Windows release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = "windows-latest"
+          git tag --force $tag $env:GITHUB_SHA
+          git push --force origin "refs/tags/$tag"
+
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag MemoryLane-Windows-x64.zip `
+              --clobber `
+              --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create $tag MemoryLane-Windows-x64.zip `
+              --title "Memory Lane for Windows" `
+              --notes "Portable Windows launcher for the local semantic image gallery. User images, indexes, and model files are not included." `
+              --repo $env:GITHUB_REPOSITORY
+          }
