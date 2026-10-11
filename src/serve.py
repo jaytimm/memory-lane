@@ -107,6 +107,18 @@ def make_handler(
             # Keep the family-facing launcher quiet; explicit startup/errors remain visible.
             return
 
+        def end_headers(self) -> None:
+            # Always revalidate the small interface files. This prevents a browser
+            # from showing an older UI after the USB gallery has been updated.
+            request_path = urlsplit(self.path).path
+            if request_path == "/" or Path(request_path).suffix.casefold() in {
+                ".html",
+                ".js",
+                ".css",
+            }:
+                self.send_header("Cache-Control", "no-cache")
+            super().end_headers()
+
         def _json(self, status: int, payload: dict) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
