@@ -28,14 +28,9 @@ python3 -m src.cluster_faces --archive ./PhotoArchive
 ```
 
 The generated `face-cluster-evaluation.html` is a curator tool, not part of the
-family-facing gallery. It first builds strict face clusters, then groups related
-age, pose, and appearance clusters into broader candidate people. Names are
-saved in browser storage while working and can be exported as JSON. Proposed
-people can be rejected or split back into their strict subclusters. It does not
-modify photographs.
-
-Small groups remain available in the recovery view. Each proposed person also
-links to the nearest related groups so fragmented age or appearance clusters can
-be inspected and assigned the same name without lowering the global threshold.
+family-facing gallery. It presents conservative face clusters for one-time
+labeling. Reusing the same name across clusters creates one person with several
+internal representations. Progress is saved in browser storage and can be
+exported as JSON. It does not modify photographs.
 
 The Windows companion is built by the workflow in `.github/workflows`.
