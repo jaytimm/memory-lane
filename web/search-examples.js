@@ -4,6 +4,9 @@ window.MEMORY_LANE_SEARCH_EXAMPLES = [
     "queries": [
       "headshot",
       "two smiling faces",
+      "tired",
+      "hugs",
+      "arms raised",
       "people standing outside a house",
       "children playing outside"
     ]
@@ -20,6 +23,7 @@ window.MEMORY_LANE_SEARCH_EXAMPLES = [
     "title": "People doing things",
     "queries": [
       "children playing in the snow",
+      "guitar playing",
       "people opening presents",
       "people swimming in a lake",
       "dogs playing in the backyard"

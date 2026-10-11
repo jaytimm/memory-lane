@@ -12,11 +12,17 @@ from src.build import build_archive
 from src.embed import _existing_vectors, _save_partial
 from src.ingest import album_year_range, stable_image_id
 from src.metadata import match_records_to_folders, read_album_records
-from src.search import FaceSearchIndex, _candidate_indices, rank_embeddings
+from src.search import (
+    FaceSearchIndex,
+    SemanticSearchEngine,
+    _candidate_indices,
+    rank_embeddings,
+)
 from src.serve import (
     parse_face_search_request,
     parse_photo_faces_request,
     parse_search_request,
+    parse_similar_request,
 )
 
 
@@ -96,6 +102,7 @@ class BuildIntegrationTests(unittest.TestCase):
             self.assertEqual(len({photo["id"] for photo in first["photos"]}), 5)
             self.assertEqual(len(first["warnings"]), 1)
             self.assertTrue((output / "index.html").exists())
+            self.assertTrue((output / "USER-GUIDE.html").exists())
             self.assertTrue((output / "assets/search-examples.js").exists())
             self.assertTrue((output / "photos/1976_WEDDING/scan.tiff").exists())
 
@@ -205,6 +212,20 @@ class SemanticRankingTests(unittest.TestCase):
             parse_photo_faces_request({"photo_id": ""})
         with self.assertRaisesRegex(ValueError, "integer"):
             parse_face_search_request({"face_id": "abc:0", "top_k": True})
+
+    def test_similar_photo_ranking_and_validation(self):
+        import numpy as np
+
+        engine = SemanticSearchEngine.__new__(SemanticSearchEngine)
+        engine.metadata = {"items": [{"id": "one"}, {"id": "two"}, {"id": "three"}]}
+        engine.embeddings = np.asarray(
+            [[1.0, 0.0], [0.8, 0.2], [0.0, 1.0]], dtype=np.float32
+        )
+        engine._photo_rows = {"one": 0, "two": 1, "three": 2}
+        self.assertEqual([item["id"] for item in engine.similar("one", 2)], ["two", "three"])
+        self.assertEqual(parse_similar_request({"photo_id": "one", "top_k": 500}), ("one", 100))
+        with self.assertRaisesRegex(ValueError, "Photo not found"):
+            engine.similar("missing")
 
 
 if __name__ == "__main__":

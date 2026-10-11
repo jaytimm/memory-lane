@@ -4,28 +4,39 @@
   const data = window.FAMILY_PHOTO_DATA;
   const PAGE_SIZE = 80;
   const albums = new Map(data.albums.map((album) => [album.id, album]));
+  const photosById = new Map(data.photos.map((photo) => [photo.id, photo]));
   const elements = {
     summary: document.querySelector("#collection-summary"),
     hero: document.querySelector("#hero-strip"),
+    controls: document.querySelector("#browse-controls"),
     semanticForm: document.querySelector("#semantic-search-form"),
     semanticQuery: document.querySelector("#semantic-query"),
     semanticSubmit: document.querySelector("#semantic-submit"),
     semanticStatus: document.querySelector("#semantic-status"),
     searchExampleGroups: document.querySelector("#search-example-groups"),
-    albumFilter: document.querySelector("#album-filter"),
     decadeFilter: document.querySelector("#decade-filter"),
     clear: document.querySelector("#clear-filters"),
     albumList: document.querySelector("#album-list"),
+    resultsSection: document.querySelector("#photo-results"),
+    resultState: document.querySelector("#result-state"),
+    resultStateText: document.querySelector("#result-state-text"),
+    clearResultState: document.querySelector("#clear-result-state"),
     albumLabel: document.querySelector("#active-album-label"),
+    photosHeading: document.querySelector("#photos-heading"),
     description: document.querySelector("#active-description"),
     count: document.querySelector("#result-count"),
     grid: document.querySelector("#photo-grid"),
     empty: document.querySelector("#empty-state"),
     loadMore: document.querySelector("#load-more"),
+    backToSearch: document.querySelector("#back-to-search"),
+    guide: document.querySelector("#guide"),
+    openGuide: document.querySelector("#open-guide"),
+    closeGuide: document.querySelector("#close-guide"),
     viewer: document.querySelector("#viewer"),
     viewerImage: document.querySelector("#viewer-image"),
     faceLayer: document.querySelector("#face-layer"),
-    faceStatus: document.querySelector("#face-status"),
+    viewerStatus: document.querySelector("#face-status"),
+    findSimilar: document.querySelector("#find-similar"),
     findPerson: document.querySelector("#find-person"),
     viewerTitle: document.querySelector("#viewer-title"),
     viewerAlbum: document.querySelector("#viewer-album"),
@@ -35,14 +46,44 @@
   let filteredPhotos = data.photos;
   let shown = PAGE_SIZE;
   let viewerIndex = -1;
-  let semanticPhotos = null;
-  let semanticQuery = "";
-  let semanticDescription = "";
+  let activeAlbumId = "";
+  let activeDecade = null;
+  let searchPhotos = null;
+  let searchMode = null;
+  let searchQuery = "";
+  let searchDescription = "";
+  let imageSearchAvailable = false;
   let faceSearchAvailable = false;
-  const photosById = new Map(data.photos.map((photo) => [photo.id, photo]));
 
   function plural(number, word) {
     return `${number.toLocaleString()} ${word}${number === 1 ? "" : "s"}`;
+  }
+
+  function clearSearch(clearInput = false) {
+    searchPhotos = null;
+    searchMode = null;
+    searchQuery = "";
+    searchDescription = "";
+    if (clearInput) elements.semanticQuery.value = "";
+    elements.semanticStatus.textContent = "Search looks at the photographs themselves.";
+    elements.semanticStatus.classList.remove("error");
+  }
+
+  function clearEverything() {
+    clearSearch(true);
+    activeAlbumId = "";
+    activeDecade = null;
+    shown = PAGE_SIZE;
+    render();
+  }
+
+  function chooseDecade(decade) {
+    clearSearch(true);
+    activeAlbumId = "";
+    activeDecade = decade;
+    shown = PAGE_SIZE;
+    render();
+    elements.photosHeading.scrollIntoView({ behavior: "smooth" });
   }
 
   function initializeFilters() {
@@ -55,12 +96,31 @@
       image.alt = "";
       elements.hero.append(image);
     }
-    data.albums.forEach((album) => {
-      const option = document.createElement("option");
-      option.value = album.id;
-      option.textContent = album.title;
-      elements.albumFilter.append(option);
 
+    const allYears = document.createElement("button");
+    allYears.type = "button";
+    allYears.className = "decade-button";
+    allYears.dataset.decade = "";
+    allYears.textContent = "All years";
+    allYears.addEventListener("click", () => chooseDecade(null));
+    elements.decadeFilter.append(allYears);
+
+    const decades = [...new Set(
+      data.photos
+        .map((photo) => photo.date_start ? Math.floor(photo.date_start / 10) * 10 : null)
+        .filter(Boolean),
+    )].sort();
+    decades.forEach((decade) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "decade-button";
+      button.dataset.decade = String(decade);
+      button.textContent = `${decade}s`;
+      button.addEventListener("click", () => chooseDecade(decade));
+      elements.decadeFilter.append(button);
+    });
+
+    data.albums.forEach((album) => {
       const card = document.createElement("button");
       card.type = "button";
       card.className = "album-card";
@@ -84,21 +144,14 @@
       body.append(title, details, note);
       card.append(cover, body);
       card.addEventListener("click", () => {
-        elements.albumFilter.value = album.id;
-        elements.decadeFilter.value = "";
+        clearSearch(true);
+        activeAlbumId = album.id;
+        activeDecade = null;
         shown = PAGE_SIZE;
         render();
-        document.querySelector("#photos-heading").scrollIntoView({ behavior: "smooth" });
+        elements.photosHeading.scrollIntoView({ behavior: "smooth" });
       });
       elements.albumList.append(card);
-    });
-
-    const decades = [...new Set(data.photos.map((photo) => photo.date_start ? Math.floor(photo.date_start / 10) * 10 : null).filter(Boolean))].sort();
-    decades.forEach((decade) => {
-      const option = document.createElement("option");
-      option.value = String(decade);
-      option.textContent = `${decade}s`;
-      elements.decadeFilter.append(option);
     });
   }
 
@@ -128,53 +181,78 @@
   }
 
   function applyFilters() {
-    if (semanticPhotos) {
-      filteredPhotos = semanticPhotos;
+    if (searchPhotos !== null) {
+      filteredPhotos = searchPhotos;
       return;
     }
-    const albumId = elements.albumFilter.value;
-    const decade = Number(elements.decadeFilter.value || 0);
     filteredPhotos = data.photos.filter((photo) => {
-      if (albumId && photo.album_id !== albumId) return false;
-      if (decade && (!photo.date_start || Math.floor(photo.date_start / 10) * 10 !== decade)) return false;
+      if (activeAlbumId && photo.album_id !== activeAlbumId) return false;
+      if (activeDecade && (!photo.date_start || Math.floor(photo.date_start / 10) * 10 !== activeDecade)) return false;
       return true;
     });
   }
 
-  function openViewer(index) {
-    viewerIndex = index;
-    const photo = filteredPhotos[index];
-    const album = albums.get(photo.album_id);
-    elements.viewerImage.src = photo.preview;
-    elements.viewerImage.alt = photo.filename;
-    elements.viewerTitle.textContent = photo.filename;
-    elements.viewerAlbum.textContent = album.title;
-    elements.faceLayer.replaceChildren();
-    elements.faceStatus.textContent = "";
-    elements.findPerson.disabled = false;
-    elements.findPerson.hidden = !faceSearchAvailable;
-    if (photo.original) {
-      elements.original.href = photo.original;
-      elements.original.hidden = false;
+  function stateText() {
+    const album = albums.get(activeAlbumId);
+    const within = album ? ` within ${album.title}` : (activeDecade ? ` within the ${activeDecade}s` : "");
+    if (searchMode === "text") return `Searching for “${searchQuery}”${within}`;
+    if (searchMode === "face") return "Showing photographs of this person";
+    if (searchMode === "similar") return "Showing photographs similar to the selected photograph";
+    if (album) return `Showing photographs from ${album.title}`;
+    if (activeDecade) return `Showing photographs from the ${activeDecade}s`;
+    return "";
+  }
+
+  function renderHeading() {
+    const album = albums.get(activeAlbumId);
+    if (searchMode === "text") {
+      elements.albumLabel.textContent = "Search results";
+      elements.photosHeading.textContent = `“${searchQuery}”`;
+      elements.description.textContent = searchDescription;
+    } else if (searchMode === "face") {
+      elements.albumLabel.textContent = "Search results";
+      elements.photosHeading.textContent = "Photographs of this person";
+      elements.description.textContent = searchDescription;
+    } else if (searchMode === "similar") {
+      elements.albumLabel.textContent = "Search results";
+      elements.photosHeading.textContent = "Similar photographs";
+      elements.description.textContent = searchDescription;
+    } else if (album) {
+      elements.albumLabel.textContent = "Album";
+      elements.photosHeading.textContent = album.title;
+      elements.description.textContent = album.description;
+    } else if (activeDecade) {
+      elements.albumLabel.textContent = "Decade";
+      elements.photosHeading.textContent = `${activeDecade}s photographs`;
+      elements.description.textContent = "";
     } else {
-      elements.original.hidden = true;
+      elements.albumLabel.textContent = "All albums";
+      elements.photosHeading.textContent = "Photographs";
+      elements.description.textContent = "";
     }
-    if (!elements.viewer.open) elements.viewer.showModal();
   }
 
   function render() {
     applyFilters();
     elements.grid.replaceChildren();
-    const selectedAlbum = albums.get(elements.albumFilter.value);
-    const selectedDecade = elements.decadeFilter.value;
-    elements.albumLabel.textContent = semanticQuery ? `Search: ${semanticQuery}` : (selectedAlbum ? selectedAlbum.title : (selectedDecade ? `${selectedDecade}s` : "All albums"));
-    elements.description.textContent = semanticQuery ? semanticDescription : (selectedAlbum ? selectedAlbum.description : "");
+    renderHeading();
+    const currentState = stateText();
+    elements.resultState.hidden = !currentState;
+    elements.resultStateText.textContent = currentState;
+    elements.resultsSection.classList.toggle("search-results", searchPhotos !== null);
     elements.count.textContent = plural(filteredPhotos.length, "photograph");
     elements.empty.hidden = filteredPhotos.length !== 0;
     elements.loadMore.hidden = shown >= filteredPhotos.length;
+    elements.backToSearch.hidden = !(currentState || shown > PAGE_SIZE);
 
     document.querySelectorAll(".album-card").forEach((card) => {
-      card.classList.toggle("active", card.dataset.albumId === elements.albumFilter.value);
+      card.classList.toggle("active", card.dataset.albumId === activeAlbumId);
+    });
+    document.querySelectorAll(".decade-button").forEach((button) => {
+      button.classList.toggle(
+        "active",
+        button.dataset.decade === (activeDecade ? String(activeDecade) : ""),
+      );
     });
 
     filteredPhotos.slice(0, shown).forEach((photo, index) => {
@@ -194,36 +272,37 @@
     });
   }
 
-  elements.albumFilter.addEventListener("change", () => {
-    elements.decadeFilter.value = "";
-    clearSemanticResults();
-    shown = PAGE_SIZE;
-    render();
-  });
-  elements.decadeFilter.addEventListener("change", () => {
-    elements.albumFilter.value = "";
-    clearSemanticResults();
-    shown = PAGE_SIZE;
-    render();
-  });
-  elements.clear.addEventListener("click", () => {
-    clearSemanticResults(true);
-    elements.albumFilter.value = "";
-    elements.decadeFilter.value = "";
-    shown = PAGE_SIZE;
-    render();
-  });
-  elements.loadMore.addEventListener("click", () => { shown += PAGE_SIZE; render(); });
-
-  function clearSemanticResults(clearInput = false) {
-    semanticPhotos = null;
-    semanticQuery = "";
-    semanticDescription = "";
-    if (clearInput && elements.semanticQuery) elements.semanticQuery.value = "";
-    if (elements.semanticStatus) {
-      elements.semanticStatus.textContent = "Search looks at the photographs themselves.";
-      elements.semanticStatus.classList.remove("error");
+  function openViewer(index) {
+    viewerIndex = index;
+    const photo = filteredPhotos[index];
+    const album = albums.get(photo.album_id);
+    elements.viewerImage.src = photo.preview;
+    elements.viewerImage.alt = photo.filename;
+    elements.viewerTitle.textContent = photo.filename;
+    elements.viewerAlbum.textContent = album.title;
+    elements.faceLayer.replaceChildren();
+    elements.viewerStatus.textContent = "";
+    elements.findSimilar.disabled = false;
+    elements.findPerson.disabled = false;
+    elements.findSimilar.hidden = !imageSearchAvailable;
+    elements.findPerson.hidden = !faceSearchAvailable;
+    if (photo.original) {
+      elements.original.href = photo.original;
+      elements.original.hidden = false;
+    } else {
+      elements.original.hidden = true;
     }
+    if (!elements.viewer.open) elements.viewer.showModal();
+  }
+
+  function showSearchResults(results, mode, query, description) {
+    searchPhotos = results.map((result) => photosById.get(result.id)).filter(Boolean);
+    searchMode = mode;
+    searchQuery = query || "";
+    searchDescription = description;
+    shown = PAGE_SIZE;
+    render();
+    elements.photosHeading.scrollIntoView({ behavior: "smooth" });
   }
 
   async function enableSemanticSearch() {
@@ -232,11 +311,12 @@
       if (!response.ok) return;
       const status = await response.json();
       if (!status.available) return;
-      elements.semanticForm.hidden = false;
+      imageSearchAvailable = true;
       faceSearchAvailable = Boolean(status.face_search);
+      elements.semanticForm.hidden = false;
       elements.semanticStatus.textContent = `Ready to search ${status.photo_count.toLocaleString()} photographs.`;
     } catch (_) {
-      // Direct file:// browsing intentionally keeps semantic controls hidden.
+      // Direct file:// browsing intentionally keeps model-backed controls hidden.
     }
   }
 
@@ -247,7 +327,6 @@
     elements.semanticSubmit.disabled = true;
     elements.semanticStatus.classList.remove("error");
     elements.semanticStatus.textContent = "Searching photographs…";
-    const decade = Number(elements.decadeFilter.value || 0);
     try {
       const response = await fetch("/api/search", {
         method: "POST",
@@ -255,20 +334,15 @@
         body: JSON.stringify({
           query,
           top_k: 100,
-          album: elements.albumFilter.value || null,
-          date_from: decade || null,
-          date_to: decade ? decade + 9 : null,
+          album: activeAlbumId || null,
+          date_from: activeDecade,
+          date_to: activeDecade ? activeDecade + 9 : null,
         }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Search failed");
-      semanticPhotos = payload.results.map((result) => photosById.get(result.id)).filter(Boolean);
-      semanticQuery = query;
-      semanticDescription = "Ranked by visual similarity.";
-      shown = PAGE_SIZE;
-      elements.semanticStatus.textContent = `${plural(semanticPhotos.length, "result")} ranked by visual similarity.`;
-      render();
-      document.querySelector("#photos-heading").scrollIntoView({ behavior: "smooth" });
+      showSearchResults(payload.results, "text", query, "Ranked by visual similarity.");
+      elements.semanticStatus.textContent = `${plural(payload.results.length, "result")} ranked by visual similarity.`;
     } catch (error) {
       elements.semanticStatus.textContent = error.message || "Search failed";
       elements.semanticStatus.classList.add("error");
@@ -277,10 +351,36 @@
     }
   });
 
+  elements.findSimilar.addEventListener("click", async () => {
+    const photo = filteredPhotos[viewerIndex];
+    if (!photo) return;
+    elements.findSimilar.disabled = true;
+    elements.findPerson.disabled = true;
+    elements.viewerStatus.textContent = "Finding similar photographs…";
+    try {
+      const response = await fetch("/api/similar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photo_id: photo.id, top_k: 100 }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Similar-photo search failed");
+      activeAlbumId = "";
+      activeDecade = null;
+      elements.viewer.close();
+      showSearchResults(payload.results, "similar", "", "Ranked by whole-photograph similarity.");
+    } catch (error) {
+      elements.viewerStatus.textContent = error.message || "Similar-photo search failed";
+      elements.findSimilar.disabled = false;
+      elements.findPerson.disabled = false;
+    }
+  });
+
   async function searchForFace(faceId) {
+    elements.findSimilar.disabled = true;
     elements.findPerson.disabled = true;
     elements.faceLayer.replaceChildren();
-    elements.faceStatus.textContent = "Finding this person…";
+    elements.viewerStatus.textContent = "Finding this person…";
     try {
       const response = await fetch("/api/face-search", {
         method: "POST",
@@ -289,15 +389,13 @@
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Face search failed");
-      semanticPhotos = payload.results.map((result) => photosById.get(result.id)).filter(Boolean);
-      semanticQuery = "This person";
-      semanticDescription = "Ranked by face similarity.";
-      shown = PAGE_SIZE;
+      activeAlbumId = "";
+      activeDecade = null;
       elements.viewer.close();
-      render();
-      document.querySelector("#photos-heading").scrollIntoView({ behavior: "smooth" });
+      showSearchResults(payload.results, "face", "", "Ranked by face similarity.");
     } catch (error) {
-      elements.faceStatus.textContent = error.message || "Face search failed";
+      elements.viewerStatus.textContent = error.message || "Face search failed";
+      elements.findSimilar.disabled = false;
       elements.findPerson.disabled = false;
     }
   }
@@ -305,9 +403,10 @@
   elements.findPerson.addEventListener("click", async () => {
     const photo = filteredPhotos[viewerIndex];
     if (!photo) return;
+    elements.findSimilar.disabled = true;
     elements.findPerson.disabled = true;
     elements.faceLayer.replaceChildren();
-    elements.faceStatus.textContent = "Looking for faces…";
+    elements.viewerStatus.textContent = "Looking for faces…";
     try {
       const response = await fetch("/api/faces", {
         method: "POST",
@@ -317,7 +416,8 @@
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Could not load faces");
       if (!payload.faces.length) {
-        elements.faceStatus.textContent = "No clear face was found in this photograph.";
+        elements.viewerStatus.textContent = "No clear face was found in this photograph.";
+        elements.findSimilar.disabled = false;
         elements.findPerson.disabled = false;
         return;
       }
@@ -338,13 +438,23 @@
         button.addEventListener("click", () => searchForFace(face.id));
         elements.faceLayer.append(button);
       });
-      elements.faceStatus.textContent = "Choose a face in the photograph.";
+      elements.viewerStatus.textContent = "Choose a face in the photograph.";
+      elements.findSimilar.disabled = false;
       elements.findPerson.disabled = false;
     } catch (error) {
-      elements.faceStatus.textContent = error.message || "Could not load faces";
+      elements.viewerStatus.textContent = error.message || "Could not load faces";
+      elements.findSimilar.disabled = false;
       elements.findPerson.disabled = false;
     }
   });
+
+  elements.clear.addEventListener("click", clearEverything);
+  elements.clearResultState.addEventListener("click", clearEverything);
+  elements.loadMore.addEventListener("click", () => { shown += PAGE_SIZE; render(); });
+  elements.backToSearch.addEventListener("click", () => elements.controls.scrollIntoView({ behavior: "smooth" }));
+  elements.openGuide.addEventListener("click", () => elements.guide.showModal());
+  elements.closeGuide.addEventListener("click", () => elements.guide.close());
+  elements.guide.addEventListener("click", (event) => { if (event.target === elements.guide) elements.guide.close(); });
   document.querySelector("#close-viewer").addEventListener("click", () => elements.viewer.close());
   document.querySelector("#previous-photo").addEventListener("click", () => openViewer((viewerIndex - 1 + filteredPhotos.length) % filteredPhotos.length));
   document.querySelector("#next-photo").addEventListener("click", () => openViewer((viewerIndex + 1) % filteredPhotos.length));

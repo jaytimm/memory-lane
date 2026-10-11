@@ -71,6 +71,9 @@ class SemanticSearchEngine:
             raise ValueError("Installed OpenCLIP model version does not match this index")
         self.model, _, self.tokenizer, _ = load_clip(self.archive / ".model-cache")
         self._model_lock = Lock()
+        self._photo_rows = {
+            item["id"]: index for index, item in enumerate(self.metadata["items"])
+        }
 
     @property
     def photo_count(self) -> int:
@@ -95,6 +98,23 @@ class SemanticSearchEngine:
                 **self.metadata["items"][index],
                 "score": round(score, 6),
                 "query": query,
+            }
+            for index, score in ranked
+        ]
+
+    def similar(self, photo_id: str, top_k: int = 100) -> list[dict]:
+        if photo_id not in self._photo_rows:
+            raise ValueError("Photo not found")
+        source_row = self._photo_rows[photo_id]
+        candidates = np.arange(len(self.metadata["items"]), dtype=np.int64)
+        candidates = candidates[candidates != source_row]
+        ranked = rank_embeddings(
+            self.embeddings, self.embeddings[source_row], candidates, top_k
+        )
+        return [
+            {
+                **self.metadata["items"][index],
+                "score": round(score, 6),
             }
             for index, score in ranked
         ]

@@ -7,6 +7,9 @@ gallery. Clicking an example runs it immediately.
 
 - `headshot`
 - `two smiling faces`
+- `tired`
+- `hugs`
+- `arms raised`
 - `people standing outside a house`
 - `children playing outside`
 
@@ -19,6 +22,7 @@ gallery. Clicking an example runs it immediately.
 ## People doing things
 
 - `children playing in the snow`
+- `guitar playing`
 - `people opening presents`
 - `people swimming in a lake`
 - `dogs playing in the backyard`

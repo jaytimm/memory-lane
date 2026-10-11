@@ -54,6 +54,14 @@ def parse_photo_faces_request(payload: object) -> str:
     return photo_id
 
 
+def parse_similar_request(payload: object) -> tuple[str, int]:
+    photo_id = parse_photo_faces_request(payload)
+    top_k = payload.get("top_k", 100)
+    if not isinstance(top_k, int) or isinstance(top_k, bool):
+        raise ValueError("top_k must be an integer")
+    return photo_id, min(100, max(1, top_k))
+
+
 def parse_face_search_request(payload: object) -> tuple[str, int]:
     if not isinstance(payload, dict):
         raise ValueError("Request body must be a JSON object")
@@ -101,7 +109,12 @@ def make_handler(
             super().do_GET()
 
         def do_POST(self) -> None:
-            if self.path not in ("/api/search", "/api/faces", "/api/face-search"):
+            if self.path not in (
+                "/api/search",
+                "/api/similar",
+                "/api/faces",
+                "/api/face-search",
+            ):
                 self._json(404, {"error": "Not found"})
                 return
             try:
@@ -116,6 +129,10 @@ def make_handler(
                         200,
                         {"query": request["query"], "count": len(results), "results": results},
                     )
+                elif self.path == "/api/similar":
+                    photo_id, top_k = parse_similar_request(payload)
+                    results = engine.similar(photo_id, top_k)
+                    self._json(200, {"count": len(results), "results": results})
                 elif face_index is None:
                     self._json(404, {"error": "Face search is not available"})
                 elif self.path == "/api/faces":

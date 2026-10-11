@@ -17,7 +17,7 @@
   </header>
 
   <main>
-    <section class="controls" aria-label="Browse photographs">
+    <section id="browse-controls" class="controls" aria-label="Browse photographs">
       <form id="semantic-search-form" class="semantic-search" hidden>
         <label>
           <span>Search photographs</span>
@@ -32,19 +32,18 @@
           <div id="search-example-groups" class="search-example-groups"></div>
         </details>
       </form>
-      <div class="control-intro">
-        <p class="eyebrow">Jump to</p>
-        <p>Choose an album or a decade.</p>
+      <div class="browse-intro">
+        <div>
+          <p class="eyebrow">Three easy ways to begin</p>
+          <p>Choose an album below, choose a decade, or describe a photograph you remember.</p>
+        </div>
+        <button id="open-guide" type="button" class="guide-button">How to use Memory Lane</button>
       </div>
-      <label>
-        <span>Browse by album</span>
-        <select id="album-filter"><option value="">All albums</option></select>
-      </label>
-      <label>
-        <span>Browse by decade</span>
-        <select id="decade-filter"><option value="">All years</option></select>
-      </label>
-      <button id="clear-filters" type="button" class="quiet-button">Show everything</button>
+      <div class="decade-control" aria-labelledby="decade-label">
+        <span id="decade-label">Browse by decade</span>
+        <div id="decade-filter" class="decade-list"></div>
+      </div>
+      <button id="clear-filters" type="button" class="quiet-button">Show all photographs</button>
     </section>
 
     <section aria-labelledby="albums-heading">
@@ -57,7 +56,11 @@
       <div id="album-list" class="album-list"></div>
     </section>
 
-    <section aria-labelledby="photos-heading">
+    <section id="photo-results" class="photo-results" aria-labelledby="photos-heading">
+      <div id="result-state" class="result-state" hidden>
+        <strong id="result-state-text"></strong>
+        <button id="clear-result-state" type="button">Clear search and filters</button>
+      </div>
       <div class="section-heading photo-heading">
         <div>
           <p class="eyebrow" id="active-album-label">All albums</p>
@@ -69,8 +72,25 @@
       <div id="photo-grid" class="photo-grid"></div>
       <p id="empty-state" class="empty-state" hidden>No photographs match those filters.</p>
       <button id="load-more" type="button" class="load-more" hidden>Show more photographs</button>
+      <button id="back-to-search" type="button" class="back-to-search" hidden>↑ Back to search</button>
     </section>
   </main>
+
+  <dialog id="guide" class="guide-dialog">
+    <button id="close-guide" class="guide-close" type="button" aria-label="Close guide">×</button>
+    <p class="eyebrow">Help</p>
+    <h2>How to use Memory Lane</h2>
+    <ol class="guide-steps">
+      <li><strong>Browse an album.</strong><span>Click an album picture. Its photographs will appear below.</span></li>
+      <li><strong>Browse by decade.</strong><span>Click a decade near the top. Click <b>All years</b> when you are finished.</span></li>
+      <li><strong>Search for something you remember.</strong><span>Type a short description such as <b>yellow tents</b>, <b>hugs</b>, or <b>two smiling faces</b>.</span></li>
+      <li><strong>See search ideas.</strong><span>Open the examples below the search box and click any example to run it.</span></li>
+      <li><strong>Open a photograph.</strong><span>Click it to enlarge it. Use the left and right arrows to move through the results.</span></li>
+      <li><strong>Find related photographs.</strong><span>Open a photograph and choose <b>Find similar photos</b> or <b>Find this person</b>.</span></li>
+      <li><strong>Copy or save a photograph.</strong><span>Right-click the photograph to use your browser’s normal Copy image or Save image as options. For full quality, open the original first.</span></li>
+      <li><strong>Start over.</strong><span>Click <b>Show all photographs</b> or <b>Clear search and filters</b>.</span></li>
+    </ol>
+  </dialog>
 
   <dialog id="viewer" class="viewer">
     <button id="close-viewer" class="viewer-close" type="button" aria-label="Close">×</button>
@@ -87,7 +107,8 @@
         </div>
         <div class="viewer-actions">
           <span id="face-status" class="face-status" role="status"></span>
-          <button id="find-person" type="button" class="find-person" hidden>Find this person</button>
+          <button id="find-similar" type="button" class="viewer-search-button" hidden>Find similar photos</button>
+          <button id="find-person" type="button" class="viewer-search-button" hidden>Find this person</button>
           <a id="open-original" target="_blank" rel="noopener">Open original</a>
         </div>
       </figcaption>
