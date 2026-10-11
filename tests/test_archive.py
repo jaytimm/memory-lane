@@ -13,6 +13,7 @@ from src.train_person import confirmed_examples, predict_scores, train_binary_ri
 from src.build import build_archive
 from src.cluster_faces import conservative_clusters, nearest_faces
 from src.embed import _existing_vectors, _save_partial
+from src.finalize_labels import normalize_aliases
 from src.ingest import album_year_range, stable_image_id
 from src.metadata import match_records_to_folders, read_album_records
 from src.search import (
@@ -133,6 +134,20 @@ class BuildIntegrationTests(unittest.TestCase):
 
 
 class SemanticRankingTests(unittest.TestCase):
+    def test_label_aliases_merge_clusters_recovery_and_people(self):
+        labels = {
+            "clusters": [
+                {"cluster_id": "one", "name": "Jeff", "face_ids": ["a"]},
+                {"cluster_id": "two", "name": "Jeffe", "face_ids": ["b"]},
+            ],
+            "recovery": {"accepted": {"Jeffe": [["c"]]}, "dismissed": {}},
+            "people": {},
+        }
+        result = normalize_aliases(labels, {"Jeffe": "Jeff"})
+        self.assertEqual(set(result["people"]), {"Jeff"})
+        self.assertEqual(result["people"]["Jeff"]["face_ids"], ["a", "b", "c"])
+        self.assertEqual(result["people"]["Jeff"]["cluster_ids"], ["one", "two"])
+
     def test_binary_identity_model_separates_one_person_from_others(self):
         import numpy as np
 

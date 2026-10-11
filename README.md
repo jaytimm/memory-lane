@@ -50,6 +50,15 @@ The audit separates strong automatic candidates from a lower-confidence review
 zone and compares each face with every other named person before proposing an
 assignment.
 
+Normalize spelling aliases in a completed export before treating it as the gold
+label set:
+
+```bash
+python3 -m src.finalize_labels --labels ./people-cluster-labels.json \
+  --output ./PhotoArchive/people-labels-gold.json \
+  --alias Jackiea=Jackie --alias Jeffe=Jeff
+```
+
 Train a binary identity classifier for one person and apply it across the full
 face index. Other confirmed people serve only as negative examples:
 
