@@ -9,7 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from PIL import Image
 
 from src.audit_identity import label_profiles, score_identity
-from src.train_identities import confirmed_labels, predict_identities, train_balanced_ridge
+from src.train_person import confirmed_examples, predict_scores, train_binary_ridge
 from src.build import build_archive
 from src.cluster_faces import conservative_clusters, nearest_faces
 from src.embed import _existing_vectors, _save_partial
@@ -133,16 +133,15 @@ class BuildIntegrationTests(unittest.TestCase):
 
 
 class SemanticRankingTests(unittest.TestCase):
-    def test_multiclass_identity_model_learns_separate_people(self):
+    def test_binary_identity_model_separates_one_person_from_others(self):
         import numpy as np
 
         features = np.asarray([[1, 0], [.9, .1], [0, 1], [.1, .9]], dtype=np.float32)
-        targets = np.asarray([0, 0, 1, 1])
-        model = train_balanced_ridge(features, targets, 2, regularization=.01)
-        winners, scores, margins = predict_identities(features, model)
-        self.assertEqual(winners.tolist(), targets.tolist())
-        self.assertTrue(np.all(margins > 0))
-        self.assertTrue(np.all(scores > 0))
+        positive = np.asarray([True, True, False, False])
+        model = train_binary_ridge(features, positive, regularization=.01)
+        scores = predict_scores(features, model)
+        self.assertTrue(np.all(scores[positive] > 0))
+        self.assertTrue(np.all(scores[~positive] < 0))
 
     def test_confirmed_identity_labels_reject_conflicts(self):
         labels = {
@@ -152,7 +151,7 @@ class SemanticRankingTests(unittest.TestCase):
             ]
         }
         with self.assertRaises(ValueError):
-            confirmed_labels(labels, {"a": 0})
+            confirmed_examples(labels, {"a": 0})
 
     def test_identity_profiles_score_target_and_competing_people(self):
         import numpy as np
