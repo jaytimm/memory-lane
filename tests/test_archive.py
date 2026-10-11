@@ -8,7 +8,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from PIL import Image
 
-from src.audit_identity import label_profiles, score_identity
+from src.audit_identity import label_profiles, score_identity, strong_identity_rows
 from src.build import build_archive
 from src.cluster_faces import conservative_clusters, nearest_faces
 from src.embed import _existing_vectors, _save_partial
@@ -150,6 +150,22 @@ class SemanticRankingTests(unittest.TestCase):
         self.assertGreater(scores[0], .99)
         self.assertGreater(margins[0], .9)
         self.assertEqual(competitors[0], "Jeff")
+
+    def test_identity_propagation_is_one_pass_and_excludes_automatic_results(self):
+        import numpy as np
+
+        embeddings = np.asarray([[1, 0], [0, 1], [.99, .01], [.98, .02]], dtype=np.float32)
+        embeddings /= np.linalg.norm(embeddings, axis=1, keepdims=True)
+        labels = {
+            "clusters": [
+                {"name": "Anthony", "face_ids": ["seed"]},
+                {"name": "Jeff", "face_ids": ["jeff"]},
+            ],
+            "automatic": {"Anthony": {"face_ids": ["already"]}},
+        }
+        rows = {"seed": 0, "jeff": 1, "already": 2, "new": 3}
+        matches = strong_identity_rows(labels, embeddings, rows, "Anthony")
+        self.assertEqual([match[0] for match in matches], ["new"])
 
     def test_conservative_face_clusters_require_reciprocal_neighbors(self):
         import numpy as np
