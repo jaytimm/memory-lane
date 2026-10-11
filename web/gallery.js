@@ -314,6 +314,9 @@
       imageSearchAvailable = true;
       faceSearchAvailable = Boolean(status.face_search);
       elements.semanticForm.hidden = false;
+      if (status.face_search) {
+        elements.summary.textContent = `${plural(data.photos.length, "photograph")} · ${plural(data.albums.length, "album")} · ${plural(status.face_count, "face")}`;
+      }
       elements.semanticStatus.textContent = `Ready to search ${status.photo_count.toLocaleString()} photographs.`;
     } catch (_) {
       // Direct file:// browsing intentionally keeps model-backed controls hidden.
