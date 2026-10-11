@@ -37,10 +37,9 @@
     faceLayer: document.querySelector("#face-layer"),
     viewerStatus: document.querySelector("#face-status"),
     findSimilar: document.querySelector("#find-similar"),
-    findPerson: document.querySelector("#find-person"),
+    findFaces: document.querySelector("#find-faces"),
     viewerTitle: document.querySelector("#viewer-title"),
     viewerAlbum: document.querySelector("#viewer-album"),
-    original: document.querySelector("#open-original"),
   };
 
   let filteredPhotos = data.photos;
@@ -196,7 +195,7 @@
     const album = albums.get(activeAlbumId);
     const within = album ? ` within ${album.title}` : (activeDecade ? ` within the ${activeDecade}s` : "");
     if (searchMode === "text") return `Searching for “${searchQuery}”${within}`;
-    if (searchMode === "face") return "Showing photographs of this person";
+    if (searchMode === "face") return "Showing photographs with similar faces";
     if (searchMode === "similar") return "Showing photographs similar to the selected photograph";
     if (album) return `Showing photographs from ${album.title}`;
     if (activeDecade) return `Showing photographs from the ${activeDecade}s`;
@@ -211,7 +210,7 @@
       elements.description.textContent = searchDescription;
     } else if (searchMode === "face") {
       elements.albumLabel.textContent = "Search results";
-      elements.photosHeading.textContent = "Photographs of this person";
+      elements.photosHeading.textContent = "Similar faces";
       elements.description.textContent = searchDescription;
     } else if (searchMode === "similar") {
       elements.albumLabel.textContent = "Search results";
@@ -283,15 +282,9 @@
     elements.faceLayer.replaceChildren();
     elements.viewerStatus.textContent = "";
     elements.findSimilar.disabled = false;
-    elements.findPerson.disabled = false;
+    elements.findFaces.disabled = false;
     elements.findSimilar.hidden = !imageSearchAvailable;
-    elements.findPerson.hidden = !faceSearchAvailable;
-    if (photo.original) {
-      elements.original.href = photo.original;
-      elements.original.hidden = false;
-    } else {
-      elements.original.hidden = true;
-    }
+    elements.findFaces.hidden = !faceSearchAvailable;
     if (!elements.viewer.open) elements.viewer.showModal();
   }
 
@@ -358,7 +351,7 @@
     const photo = filteredPhotos[viewerIndex];
     if (!photo) return;
     elements.findSimilar.disabled = true;
-    elements.findPerson.disabled = true;
+    elements.findFaces.disabled = true;
     elements.viewerStatus.textContent = "Finding similar photographs…";
     try {
       const response = await fetch("/api/similar", {
@@ -375,15 +368,15 @@
     } catch (error) {
       elements.viewerStatus.textContent = error.message || "Similar-photo search failed";
       elements.findSimilar.disabled = false;
-      elements.findPerson.disabled = false;
+      elements.findFaces.disabled = false;
     }
   });
 
   async function searchForFace(faceId) {
     elements.findSimilar.disabled = true;
-    elements.findPerson.disabled = true;
+    elements.findFaces.disabled = true;
     elements.faceLayer.replaceChildren();
-    elements.viewerStatus.textContent = "Finding this person…";
+    elements.viewerStatus.textContent = "Finding similar faces…";
     try {
       const response = await fetch("/api/face-search", {
         method: "POST",
@@ -399,15 +392,15 @@
     } catch (error) {
       elements.viewerStatus.textContent = error.message || "Face search failed";
       elements.findSimilar.disabled = false;
-      elements.findPerson.disabled = false;
+      elements.findFaces.disabled = false;
     }
   }
 
-  elements.findPerson.addEventListener("click", async () => {
+  elements.findFaces.addEventListener("click", async () => {
     const photo = filteredPhotos[viewerIndex];
     if (!photo) return;
     elements.findSimilar.disabled = true;
-    elements.findPerson.disabled = true;
+    elements.findFaces.disabled = true;
     elements.faceLayer.replaceChildren();
     elements.viewerStatus.textContent = "Looking for faces…";
     try {
@@ -421,7 +414,7 @@
       if (!payload.faces.length) {
         elements.viewerStatus.textContent = "No clear face was found in this photograph.";
         elements.findSimilar.disabled = false;
-        elements.findPerson.disabled = false;
+        elements.findFaces.disabled = false;
         return;
       }
       if (payload.faces.length === 1) {
@@ -433,7 +426,7 @@
         const button = document.createElement("button");
         button.type = "button";
         button.className = "face-choice";
-        button.setAttribute("aria-label", `Find person ${index + 1}`);
+        button.setAttribute("aria-label", `Find faces similar to face ${index + 1}`);
         button.style.left = `${x * 100}%`;
         button.style.top = `${y * 100}%`;
         button.style.width = `${width * 100}%`;
@@ -443,11 +436,11 @@
       });
       elements.viewerStatus.textContent = "Choose a face in the photograph.";
       elements.findSimilar.disabled = false;
-      elements.findPerson.disabled = false;
+      elements.findFaces.disabled = false;
     } catch (error) {
       elements.viewerStatus.textContent = error.message || "Could not load faces";
       elements.findSimilar.disabled = false;
-      elements.findPerson.disabled = false;
+      elements.findFaces.disabled = false;
     }
   });
 

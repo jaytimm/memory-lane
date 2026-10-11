@@ -3,13 +3,6 @@
 The face-clustering and named-person experiment has been retired. The existing
 **Find similar faces** search remains a simple, unnamed visual-similarity tool.
 
-## Viewer
-
-- Remove the **Open original** link. Keep the note that right-click copy/save is
-  normal browser behavior.
-- Rename **Find this person** to **Find similar faces** so the button describes
-  what the app actually does without promising identity recognition.
-
 ## Search results and similarity
 
 - Revisit the fixed top-100 result limit used by text search, **Find similar

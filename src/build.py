@@ -216,8 +216,8 @@ def build_archive(
     copy2(WEB_DIR / "search-examples.js", assets_dir / "search-examples.js")
     (output_dir / "README.txt").write_text(
         "Family Photo Archive\n\n"
-        "Open index.html in a modern web browser. No internet connection is required.\n"
-        "The Photos link in the viewer opens the unchanged original image.\n",
+        "Use the Memory Lane launcher to open the gallery. No internet connection is required.\n"
+        "Right-click an enlarged photograph to use the browser's Copy image or Save image as command.\n",
         encoding="utf-8",
     )
 

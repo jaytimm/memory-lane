@@ -357,7 +357,6 @@ input, select, .quiet-button, .load-more {
 .viewer figure img { display: block; max-width: 100%; max-height: calc(100vh - 145px); margin: auto; object-fit: contain; }
 .viewer figcaption { display: flex; justify-content: space-between; gap: 25px; padding-top: 12px; font-family: system-ui, sans-serif; }
 .viewer figcaption span { display: block; color: #c9c2b9; font-size: .86rem; margin-top: 3px; }
-.viewer a { color: white; }
 .viewer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
 .viewer-search-button {
   min-height: 38px;
