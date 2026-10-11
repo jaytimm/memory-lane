@@ -29,8 +29,9 @@
 
 ## People and face clusters
 
-- Treat this as local face recognition built from the archive itself: the user
-  should normally name a person once, not label photographs one by one.
+- Treat this as local face recognition built from the archive itself: the app
+  forms face clusters, and the user labels each useful cluster once rather than
+  labeling photographs or faces one by one.
 - Explore grouping the existing face embeddings into strong, conservative
   clusters that probably represent the same person.
 - Let the user review a cluster before naming it. Do not automatically attach a
@@ -41,8 +42,9 @@
 - Use those approved representatives together when finding that person. This
   should improve matches across age, pose, lighting, glasses, facial hair, and
   other appearance changes.
-- After that one-time enrollment, apply the saved identity to the rest of the
-  archive and to newly added photographs. Ask for help only on uncertain cases.
+- Allow several separately labeled clusters to share one person's name—for
+  example, childhood, adulthood, and side-profile clusters. Keep the cluster
+  boundaries so a mistaken group can be corrected without relabeling everything.
 - Keep weak or ambiguous faces outside the named cluster until the user confirms
   them. Provide simple actions such as **This is the same person**, **Not this
   person**, and **Name this group**.
