@@ -45,6 +45,16 @@
 - Allow several separately labeled clusters to share one person's name—for
   example, childhood, adulthood, and side-profile clusters. Keep the cluster
   boundaries so a mistaken group can be corrected without relabeling everything.
+- Derive person tags for photographs from their labeled face clusters. Labeling
+  one cluster should make every photograph represented in that cluster
+  searchable by that person's name without editing photographs individually.
+- Combine people with the existing search dimensions—for example **Mary in the
+  1980s**, **Mary playing guitar**, or photographs containing **Mary and John**.
+  Treat person selection as a reliable metadata filter and semantic text as the
+  ranked visual search within that filtered set.
+- Store these labels in the local archive index first rather than writing names
+  into the original image files. Only reviewed clusters should create person
+  tags; uncertain and unlabeled clusters should remain anonymous.
 - Keep weak or ambiguous faces outside the named cluster until the user confirms
   them. Provide simple actions such as **This is the same person**, **Not this
   person**, and **Name this group**.
