@@ -286,7 +286,10 @@
     elements.viewerImage.alt = photo.filename;
     elements.viewerTitle.textContent = photo.filename;
     elements.viewerAlbum.textContent = album.title;
-    elements.openOriginal.href = original;
+    const originalViewer = new URL("original-view.html", window.location.href);
+    originalViewer.searchParams.set("id", photo.id);
+    originalViewer.searchParams.set("name", photo.filename);
+    elements.openOriginal.href = originalViewer.href;
     elements.openOriginal.hidden = !originalsAvailable;
     elements.faceLayer.replaceChildren();
     elements.viewerStatus.textContent = "";

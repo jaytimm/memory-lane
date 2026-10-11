@@ -103,6 +103,7 @@ class BuildIntegrationTests(unittest.TestCase):
             self.assertEqual(len({photo["id"] for photo in first["photos"]}), 5)
             self.assertEqual(len(first["warnings"]), 1)
             self.assertTrue((output / "index.html").exists())
+            self.assertTrue((output / "original-view.html").exists())
             self.assertTrue((output / "USER-GUIDE.html").exists())
             self.assertTrue((output / "assets/search-examples.js").exists())
             self.assertTrue((output / "photos/1976_WEDDING/scan.tiff").exists())

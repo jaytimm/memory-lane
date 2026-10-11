@@ -41,7 +41,7 @@ for directory in .model-cache assets previews search thumbnails; do
   fi
 done
 
-for file in index.html USER-GUIDE.html README.txt; do
+for file in index.html original-view.html USER-GUIDE.html README.txt; do
   if [[ -f "$prepared_gallery/$file" ]]; then
     cp -p "$prepared_gallery/$file" "$gallery_root/$file"
   fi

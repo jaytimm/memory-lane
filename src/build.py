@@ -224,6 +224,7 @@ def build_archive(
     (assets_dir / "manifest.js").write_text(manifest_text, encoding="utf-8")
     _write_json_atomic(state_path, state)
     copy2(WEB_DIR / "index.html", output_dir / "index.html")
+    copy2(WEB_DIR / "original-view.html", output_dir / "original-view.html")
     copy2(WEB_DIR / "USER-GUIDE.html", output_dir / "USER-GUIDE.html")
     copy2(WEB_DIR / "gallery.css", assets_dir / "gallery.css")
     copy2(WEB_DIR / "gallery.js", assets_dir / "gallery.js")
