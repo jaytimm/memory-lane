@@ -9,6 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from PIL import Image
 
 from src.build import build_archive
+from src.cluster_faces import conservative_clusters, nearest_faces
 from src.embed import _existing_vectors, _save_partial
 from src.ingest import album_year_range, stable_image_id
 from src.metadata import match_records_to_folders, read_album_records
@@ -130,6 +131,33 @@ class BuildIntegrationTests(unittest.TestCase):
 
 
 class SemanticRankingTests(unittest.TestCase):
+    def test_conservative_face_clusters_require_reciprocal_neighbors(self):
+        import numpy as np
+
+        items = [
+            {"id": "a", "photo_id": "one"},
+            {"id": "b", "photo_id": "two"},
+            {"id": "c", "photo_id": "three"},
+            {"id": "d", "photo_id": "four"},
+        ]
+        embeddings = np.asarray(
+            [[1, 0], [.99, .01], [.98, .02], [0, 1]], dtype=np.float32
+        )
+        embeddings /= np.linalg.norm(embeddings, axis=1, keepdims=True)
+        clusters = conservative_clusters(
+            items, embeddings, threshold=.95, neighbors=2, minimum_size=3, block_size=2
+        )
+        self.assertEqual(len(clusters), 1)
+        self.assertEqual(clusters[0]["members"], [0, 1, 2])
+
+    def test_nearest_faces_excludes_faces_from_same_photo(self):
+        import numpy as np
+
+        embeddings = np.asarray([[1, 0], [1, 0], [.8, .2]], dtype=np.float32)
+        nearest, _ = nearest_faces(embeddings, ["one", "one", "two"], neighbors=1)
+        self.assertEqual(nearest[:2, 0].tolist(), [2, 2])
+        self.assertIn(int(nearest[2, 0]), (0, 1))
+
     def test_cosine_ranking_and_metadata_filters(self):
         import numpy as np
 
