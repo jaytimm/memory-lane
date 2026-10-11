@@ -289,6 +289,7 @@
     const originalViewer = new URL("original-view.html", window.location.href);
     originalViewer.searchParams.set("id", photo.id);
     originalViewer.searchParams.set("name", photo.filename);
+    originalViewer.searchParams.set("view", "2");
     elements.openOriginal.href = originalViewer.href;
     elements.openOriginal.hidden = !originalsAvailable;
     elements.faceLayer.replaceChildren();
