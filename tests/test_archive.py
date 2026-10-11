@@ -8,7 +8,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from PIL import Image
 
-from src.audit_identity import label_profiles, score_identity, strong_identity_rows
+from src.audit_identity import label_profiles, score_identity
+from src.train_identities import confirmed_labels, predict_identities, train_balanced_ridge
 from src.build import build_archive
 from src.cluster_faces import conservative_clusters, nearest_faces
 from src.embed import _existing_vectors, _save_partial
@@ -132,6 +133,27 @@ class BuildIntegrationTests(unittest.TestCase):
 
 
 class SemanticRankingTests(unittest.TestCase):
+    def test_multiclass_identity_model_learns_separate_people(self):
+        import numpy as np
+
+        features = np.asarray([[1, 0], [.9, .1], [0, 1], [.1, .9]], dtype=np.float32)
+        targets = np.asarray([0, 0, 1, 1])
+        model = train_balanced_ridge(features, targets, 2, regularization=.01)
+        winners, scores, margins = predict_identities(features, model)
+        self.assertEqual(winners.tolist(), targets.tolist())
+        self.assertTrue(np.all(margins > 0))
+        self.assertTrue(np.all(scores > 0))
+
+    def test_confirmed_identity_labels_reject_conflicts(self):
+        labels = {
+            "clusters": [
+                {"name": "Anthony", "face_ids": ["a"]},
+                {"name": "Jeff", "face_ids": ["a"]},
+            ]
+        }
+        with self.assertRaises(ValueError):
+            confirmed_labels(labels, {"a": 0})
+
     def test_identity_profiles_score_target_and_competing_people(self):
         import numpy as np
 
@@ -150,22 +172,6 @@ class SemanticRankingTests(unittest.TestCase):
         self.assertGreater(scores[0], .99)
         self.assertGreater(margins[0], .9)
         self.assertEqual(competitors[0], "Jeff")
-
-    def test_identity_propagation_is_one_pass_and_excludes_automatic_results(self):
-        import numpy as np
-
-        embeddings = np.asarray([[1, 0], [0, 1], [.99, .01], [.98, .02]], dtype=np.float32)
-        embeddings /= np.linalg.norm(embeddings, axis=1, keepdims=True)
-        labels = {
-            "clusters": [
-                {"name": "Anthony", "face_ids": ["seed"]},
-                {"name": "Jeff", "face_ids": ["jeff"]},
-            ],
-            "automatic": {"Anthony": {"face_ids": ["already"]}},
-        }
-        rows = {"seed": 0, "jeff": 1, "already": 2, "new": 3}
-        matches = strong_identity_rows(labels, embeddings, rows, "Anthony")
-        self.assertEqual([match[0] for match in matches], ["new"])
 
     def test_conservative_face_clusters_require_reciprocal_neighbors(self):
         import numpy as np

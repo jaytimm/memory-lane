@@ -1,4 +1,4 @@
-"""Audit or apply automatic face assignments for one named person."""
+"""Build a read-only audit of face similarity for one named person."""
 
 from __future__ import annotations
 
@@ -46,81 +46,7 @@ def label_profiles(
                 profiles.setdefault(name, []).append(
                     _centroid(embeddings, [rows_by_id[face_id] for face_id in face_ids])
                 )
-    # Automatic assignments are deliberately excluded from the prototypes. They
-    # are final results, not new training examples, so applying identity labels
-    # cannot drift into an iterative search loop.
-    for assignment in labels.get("automatic", {}).values():
-        decided.update(
-            face_id
-            for face_id in assignment.get("face_ids", [])
-            if face_id in rows_by_id
-        )
     return profiles, decided
-
-
-def strong_identity_rows(
-    labels: dict,
-    embeddings: np.ndarray,
-    rows_by_id: dict[str, int],
-    person: str,
-    strong_score: float = 0.60,
-    strong_margin: float = 0.08,
-) -> list[tuple[str, float, float, str]]:
-    """Return one-pass strong assignments without using prior automatic results."""
-    profiles, decided = label_profiles(labels, embeddings, rows_by_id)
-    scores, margins, competitors = score_identity(embeddings, profiles, person)
-    dismissed = set(labels.get("recovery", {}).get("dismissed", {}).get(person, []))
-    results = []
-    for face_id, row in rows_by_id.items():
-        if face_id in decided or face_id in dismissed:
-            continue
-        score, margin = float(scores[row]), float(margins[row])
-        if score >= strong_score and margin >= strong_margin:
-            results.append((face_id, score, margin, competitors[row]))
-    results.sort(key=lambda result: result[1], reverse=True)
-    return results
-
-
-def apply_identity_assignments(
-    archive: Path,
-    labels_path: Path,
-    person: str,
-    output: Path,
-    strong_score: float = 0.60,
-    strong_margin: float = 0.08,
-) -> tuple[Path, int]:
-    """Write a new labels file containing strong one-pass identity assignments."""
-    archive, labels_path, output = archive.resolve(), labels_path.resolve(), output.resolve()
-    labels = json.loads(labels_path.read_text(encoding="utf-8"))
-    metadata, embeddings = read_face_index(archive)
-    rows_by_id = {item["id"]: row for row, item in enumerate(metadata["items"])}
-    matches = strong_identity_rows(
-        labels, embeddings, rows_by_id, person, strong_score, strong_margin
-    )
-    new_face_ids = [match[0] for match in matches]
-    automatic = labels.setdefault("automatic", {})
-    existing_face_ids = automatic.get(person, {}).get("face_ids", [])
-    face_ids = list(dict.fromkeys([*existing_face_ids, *new_face_ids]))
-    automatic[person] = {
-        "method": "identity-propagation-v1",
-        "source": "confirmed clusters and recovery batches",
-        "similarity_threshold": strong_score,
-        "margin_threshold": strong_margin,
-        "face_ids": face_ids,
-    }
-    person_record = labels.setdefault("people", {}).setdefault(
-        person, {"cluster_ids": [], "face_ids": []}
-    )
-    person_record["face_ids"] = list(
-        dict.fromkeys([*person_record.get("face_ids", []), *face_ids])
-    )
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(labels, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(
-        f"Wrote {output} ({len(new_face_ids)} new; {len(face_ids)} total automatic {person} assignments)",
-        flush=True,
-    )
-    return output, len(new_face_ids)
 
 
 def score_identity(
@@ -246,42 +172,23 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--strong-margin", type=float, default=0.08)
     result.add_argument("--review-score", type=float, default=0.50)
     result.add_argument("--review-margin", type=float, default=0.03)
-    result.add_argument(
-        "--apply",
-        action="store_true",
-        help="write strong assignments to a new labels file instead of building an audit",
-    )
     return result
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
-    output = args.output or args.archive / (
-        "people-cluster-labels.json"
-        if args.apply
-        else f"{args.person.casefold()}-identity-audit.html"
-    )
+    output = args.output or args.archive / f"{args.person.casefold()}-identity-audit.html"
     try:
-        if args.apply:
-            apply_identity_assignments(
-                args.archive,
-                args.labels,
-                args.person,
-                output,
-                args.strong_score,
-                args.strong_margin,
-            )
-        else:
-            build_identity_audit(
-                args.archive,
-                args.labels,
-                args.person,
-                output,
-                args.strong_score,
-                args.strong_margin,
-                args.review_score,
-                args.review_margin,
-            )
+        build_identity_audit(
+            args.archive,
+            args.labels,
+            args.person,
+            output,
+            args.strong_score,
+            args.strong_margin,
+            args.review_score,
+            args.review_margin,
+        )
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2

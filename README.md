@@ -50,16 +50,17 @@ The audit separates strong automatic candidates from a lower-confidence review
 zone and compares each face with every other named person before proposing an
 assignment.
 
-After inspecting the audit, apply the strong matches in one archive-wide pass:
+Train one shared identity classifier for every named person and apply it across
+the full face index:
 
 ```bash
-python3 -m src.audit_identity --archive ./PhotoArchive \
-  --labels ./people-cluster-labels.json --person Anthony --apply \
-  --output ./PhotoArchive/people-cluster-labels.json
+python3 -m src.train_identities --archive ./PhotoArchive \
+  --labels ./people-cluster-labels.json
 ```
 
-Only confirmed clusters and manually accepted recovery batches form the identity
-reference. Automatic matches are recorded but never fed back into that reference,
-so assignment does not become a repeated search or drift over time.
+The compact multiclass model is trained only from confirmed clusters and recovery
+batches. It writes a model, assignment index, and visual audit page. Automatic
+predictions remain separate from training examples, and faces below the confidence
+cutoffs remain unknown rather than being forced to a named person.
 
 The Windows companion is built by the workflow in `.github/workflows`.
