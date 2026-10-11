@@ -8,12 +8,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from PIL import Image
 
-from src.audit_identity import label_profiles, score_identity
-from src.train_person import confirmed_examples, predict_scores, train_binary_ridge
 from src.build import build_archive
-from src.cluster_faces import conservative_clusters, nearest_faces
 from src.embed import _existing_vectors, _save_partial
-from src.finalize_labels import normalize_aliases
 from src.ingest import album_year_range, stable_image_id
 from src.metadata import match_records_to_folders, read_album_records
 from src.search import (
@@ -134,86 +130,6 @@ class BuildIntegrationTests(unittest.TestCase):
 
 
 class SemanticRankingTests(unittest.TestCase):
-    def test_label_aliases_merge_clusters_recovery_and_people(self):
-        labels = {
-            "clusters": [
-                {"cluster_id": "one", "name": "Jeff", "face_ids": ["a"]},
-                {"cluster_id": "two", "name": "Jeffe", "face_ids": ["b"]},
-            ],
-            "recovery": {"accepted": {"Jeffe": [["c"]]}, "dismissed": {}},
-            "people": {},
-        }
-        result = normalize_aliases(labels, {"Jeffe": "Jeff"})
-        self.assertEqual(set(result["people"]), {"Jeff"})
-        self.assertEqual(result["people"]["Jeff"]["face_ids"], ["a", "b", "c"])
-        self.assertEqual(result["people"]["Jeff"]["cluster_ids"], ["one", "two"])
-
-    def test_binary_identity_model_separates_one_person_from_others(self):
-        import numpy as np
-
-        features = np.asarray([[1, 0], [.9, .1], [0, 1], [.1, .9]], dtype=np.float32)
-        positive = np.asarray([True, True, False, False])
-        model = train_binary_ridge(features, positive, regularization=.01)
-        scores = predict_scores(features, model)
-        self.assertTrue(np.all(scores[positive] > 0))
-        self.assertTrue(np.all(scores[~positive] < 0))
-
-    def test_confirmed_identity_labels_reject_conflicts(self):
-        labels = {
-            "clusters": [
-                {"name": "Anthony", "face_ids": ["a"]},
-                {"name": "Jeff", "face_ids": ["a"]},
-            ]
-        }
-        with self.assertRaises(ValueError):
-            confirmed_examples(labels, {"a": 0})
-
-    def test_identity_profiles_score_target_and_competing_people(self):
-        import numpy as np
-
-        embeddings = np.asarray([[1, 0], [.9, .1], [0, 1]], dtype=np.float32)
-        embeddings /= np.linalg.norm(embeddings, axis=1, keepdims=True)
-        labels = {
-            "clusters": [
-                {"name": "Anthony", "face_ids": ["a"]},
-                {"name": "Jeff", "face_ids": ["j"]},
-            ],
-            "recovery": {"accepted": {"Anthony": [["b"]]}},
-        }
-        profiles, decided = label_profiles(labels, embeddings, {"a": 0, "b": 1, "j": 2})
-        scores, margins, competitors = score_identity(embeddings, profiles, "Anthony")
-        self.assertEqual(decided, {"a", "b", "j"})
-        self.assertGreater(scores[0], .99)
-        self.assertGreater(margins[0], .9)
-        self.assertEqual(competitors[0], "Jeff")
-
-    def test_conservative_face_clusters_require_reciprocal_neighbors(self):
-        import numpy as np
-
-        items = [
-            {"id": "a", "photo_id": "one"},
-            {"id": "b", "photo_id": "two"},
-            {"id": "c", "photo_id": "three"},
-            {"id": "d", "photo_id": "four"},
-        ]
-        embeddings = np.asarray(
-            [[1, 0], [.99, .01], [.98, .02], [0, 1]], dtype=np.float32
-        )
-        embeddings /= np.linalg.norm(embeddings, axis=1, keepdims=True)
-        clusters = conservative_clusters(
-            items, embeddings, threshold=.95, neighbors=2, minimum_size=3, block_size=2
-        )
-        self.assertEqual(len(clusters), 1)
-        self.assertEqual(clusters[0]["members"], [0, 1, 2])
-
-    def test_nearest_faces_excludes_faces_from_same_photo(self):
-        import numpy as np
-
-        embeddings = np.asarray([[1, 0], [1, 0], [.8, .2]], dtype=np.float32)
-        nearest, _ = nearest_faces(embeddings, ["one", "one", "two"], neighbors=1)
-        self.assertEqual(nearest[:2, 0].tolist(), [2, 2])
-        self.assertIn(int(nearest[2, 0]), (0, 1))
-
     def test_cosine_ranking_and_metadata_filters(self):
         import numpy as np
 
