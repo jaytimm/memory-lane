@@ -9,7 +9,12 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from PIL import Image
 
 from src.build import build_archive
-from src.cluster_faces import candidate_identity_groups, conservative_clusters, nearest_faces
+from src.cluster_faces import (
+    candidate_identity_groups,
+    conservative_clusters,
+    nearest_faces,
+    related_identity_groups,
+)
 from src.embed import _existing_vectors, _save_partial
 from src.ingest import album_year_range, stable_image_id
 from src.metadata import match_records_to_folders, read_album_records
@@ -176,6 +181,8 @@ class SemanticRankingTests(unittest.TestCase):
         )
         self.assertEqual([group["size"] for group in groups], [4, 2])
         self.assertEqual(len(groups[0]["subclusters"]), 2)
+        related = related_identity_groups(groups, embeddings, limit=1)
+        self.assertEqual(related[groups[0]["id"]][0]["id"], groups[1]["id"])
 
     def test_cosine_ranking_and_metadata_filters(self):
         import numpy as np

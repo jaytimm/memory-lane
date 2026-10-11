@@ -195,6 +195,34 @@ def candidate_identity_groups(
     return groups
 
 
+def related_identity_groups(
+    groups: list[dict], embeddings: np.ndarray, limit: int = 12
+) -> dict[str, list[dict]]:
+    """Rank other groups by their closest pair of strict-cluster centroids."""
+    if limit < 1:
+        raise ValueError("Related-group limit must be positive")
+    profiles: list[np.ndarray] = []
+    for group in groups:
+        group_profiles = []
+        for subcluster in group["subclusters"]:
+            centroid = embeddings[subcluster["members"]].mean(axis=0)
+            norm = float(np.linalg.norm(centroid))
+            group_profiles.append(centroid / norm if norm else centroid)
+        profiles.append(np.stack(group_profiles))
+    related: dict[str, list[dict]] = {}
+    for first, group in enumerate(groups):
+        candidates = []
+        for second, other in enumerate(groups):
+            if first == second:
+                continue
+            score = float(np.max(profiles[first] @ profiles[second].T))
+            candidates.append({"id": other["id"], "score": round(score, 6)})
+        related[group["id"]] = sorted(
+            candidates, key=lambda candidate: candidate["score"], reverse=True
+        )[:limit]
+    return related
+
+
 def _asset_url(path: Path, output: Path) -> str:
     relative = os.path.relpath(path.resolve(), output.parent.resolve())
     return quote(Path(relative).as_posix(), safe="/()._-~")
@@ -220,9 +248,9 @@ def build_cluster_evaluation(
         items, embeddings, threshold, neighbors, minimum_size, block_size
     )
 
-    groups = candidate_identity_groups(
-        clusters, embeddings, merge_threshold, minimum_group_size
-    )
+    groups = candidate_identity_groups(clusters, embeddings, merge_threshold, minimum_size)
+    relationships = related_identity_groups(groups, embeddings)
+    primary_groups = [group for group in groups if group["size"] >= minimum_group_size]
 
     payload_clusters = []
     for cluster in groups:
@@ -262,6 +290,8 @@ def build_cluster_evaluation(
                     {"id": subcluster["id"], "size": subcluster["size"]}
                     for subcluster in cluster["subclusters"]
                 ],
+                "primary": cluster["size"] >= minimum_group_size,
+                "related": relationships[cluster["id"]],
                 "members": members,
             }
         )
@@ -276,6 +306,7 @@ def build_cluster_evaluation(
         "minimumGroupSize": minimum_group_size,
         "strictClusterCount": len(clusters),
         "clusteredFaces": sum(cluster["size"] for cluster in groups),
+        "primaryFaceCount": sum(cluster["size"] for cluster in primary_groups),
         "clusters": payload_clusters,
     }
     title = "People cluster review"
@@ -301,23 +332,27 @@ input,select{{border:1px solid #bcc4bd;border-radius:7px;padding:9px;background:
 figure{{margin:0;background:#fff;border-radius:9px;overflow:hidden}}figure a{{display:block}}svg{{display:block;width:100%;aspect-ratio:1;background:#ddd}}
 figcaption{{padding:8px;font-size:.75rem}}figcaption strong,figcaption span{{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}figcaption span{{color:var(--muted)}}
 .empty{{padding:35px;background:#fff;border-radius:10px}}.badge{{display:inline-block;padding:3px 8px;border-radius:99px;background:#e5e8e3;margin-left:5px;font-size:.8rem}}
+.related{{margin:0 0 22px}}.related h3{{margin:0 0 9px}}.related-list{{display:flex;gap:8px;overflow:auto;padding:3px}}
+.related-button{{display:grid;grid-template-columns:46px auto;gap:8px;min-width:185px;text-align:left;background:#fff;color:var(--ink);padding:7px}}.related-button svg{{width:46px;height:46px;border-radius:5px}}
 @media(max-width:760px){{main{{display:block}}aside{{max-height:35vh;border-right:0;border-bottom:1px solid #d9ddd8}}}}
 </style></head><body><header><h1>{escape(title)}</h1>
-<p><b>{len(groups):,} candidate people</b> containing <b>{payload['clusteredFaces']:,}</b> of {len(items):,} faces. Built from {len(clusters):,} strict clusters; cluster merge similarity {merge_threshold:.2f}; minimum visible group size {minimum_group_size}.</p>
+<p><b>{len(primary_groups):,} primary candidate people</b> containing <b>{payload['primaryFaceCount']:,}</b> faces. Another {len(groups) - len(primary_groups):,} small groups remain available for recovery; nothing is discarded.</p>
 <p>Name or reject each proposed person once. Related hat, age, and pose subclusters are grouped automatically; split a proposal when it contains different people. Decisions stay in this browser until exported; photographs are not modified.</p>
-<div class="toolbar"><button id="export">Export labels</button><button id="show-unreviewed" class="secondary">Unreviewed</button><button id="show-all" class="secondary">All people</button></div>
+<div class="toolbar"><button id="export">Export labels</button><button id="show-unreviewed" class="secondary">Unreviewed</button><button id="show-all" class="secondary">All primary people</button><button id="show-recovery" class="secondary">Recovery: small groups</button></div>
 </header><main><aside><div class="cluster-list" id="cluster-list"></div></aside>
 <section class="review" id="review"><p class="empty">Choose a cluster to inspect.</p></section></main>
 <script>const DATA={json.dumps(payload, ensure_ascii=False, separators=(',', ':'))};
 const KEY=`memory-lane-people:${{DATA.archive}}:${{DATA.threshold}}:${{DATA.mergeThreshold}}:${{DATA.neighbors}}`,labels=JSON.parse(localStorage.getItem(KEY)||'{{}}');
-const list=document.querySelector('#cluster-list'),review=document.querySelector('#review');let current=null,onlyUnreviewed=true;
+const list=document.querySelector('#cluster-list'),review=document.querySelector('#review');let current=null,viewMode='unreviewed',suggestedName='';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));
 function crop(face,mini=false){{const [bx,by,bw,bh]=face.bbox,p=.42,x=Math.max(0,bx-bw*p),y=Math.max(0,by-bh*p),w=Math.min(1-x,bw*(1+2*p)),h=Math.min(1-y,bh*(1+2*p));return `<svg class="${{mini?'mini':''}}" viewBox="${{x*face.width}} ${{y*face.height}} ${{w*face.width}} ${{h*face.height}}" preserveAspectRatio="xMidYMid slice"><image href="${{face.preview}}" width="${{face.width}}" height="${{face.height}}"/></svg>`}}
 function save(){{localStorage.setItem(KEY,JSON.stringify(labels));renderList();}}
-function activeGroups(){{const result=[];DATA.clusters.forEach(group=>{{if(!labels[group.id]?.split){{result.push(group);return}}group.subclusters.forEach((subcluster,index)=>{{result.push({{id:`${{group.id}}:${{subcluster.id}}`,parent:group.id,size:subcluster.size,subclusters:[subcluster],merge_min:1,members:group.members.filter(face=>face.subcluster===index+1).map(face=>({{...face,subcluster:1}}))}})}})}});return result}}
-function renderList(){{list.innerHTML='';activeGroups().filter(c=>!onlyUnreviewed||!labels[c.id]).forEach(c=>{{const label=labels[c.id],b=document.createElement('button');b.className='cluster-button'+(current===c.id?' active':'');b.innerHTML=crop(c.members[0],true)+`<span><b>${{esc(label?.name||(label?.rejected?'Rejected':'Person '+c.id))}}</b><small>${{c.size}} faces · ${{c.subclusters.length}} subcluster${{c.subclusters.length===1?'':'s'}}</small></span>`;b.onclick=()=>show(c.id);list.append(b)}});if(!list.children.length)list.innerHTML='<p>Every candidate person has been reviewed.</p>'}}
-function show(id){{current=id;const groups=activeGroups(),c=groups.find(x=>x.id===id),label=labels[id]||{{}};if(!c)return;renderList();const splitAction=c.parent?'<button id="undo-split" class="secondary">Restore merged group</button>':(c.subclusters.length>1?'<button id="split" class="secondary">Split into subclusters</button>':'');review.innerHTML=`<div class="review-head"><div><h2>${{esc(label.name||'Unlabeled person')}} <span class="badge">${{c.size}} faces</span></h2><p>${{c.subclusters.length}} strict subcluster${{c.subclusters.length===1?'':'s'}} · weakest subcluster link ${{c.merge_min.toFixed(3)}} · group ${{c.id}}</p></div><div><button id="previous" class="secondary">← Previous</button> <button id="next" class="secondary">Next →</button></div></div><div class="label-form"><input id="person-name" placeholder="Person's name" value="${{esc(label.name||'')}}"><button id="save-label">Name person</button><button id="reject" class="danger">Reject group</button>${{splitAction}}</div><div class="faces">${{c.members.slice(0,160).map(f=>`<figure><a href="${{f.preview}}" target="_blank">${{crop(f)}}</a><figcaption><strong>${{esc(f.filename)}}</strong><span>Subcluster ${{f.subcluster}} · ${{esc(f.album)}}${{f.year?' · '+f.year:''}}</span></figcaption></figure>`).join('')}}</div>${{c.size>160?`<p>Showing the first 160 of ${{c.size}} faces.</p>`:''}}`;document.querySelector('#save-label').onclick=()=>{{const name=document.querySelector('#person-name').value.trim();if(!name)return;labels[id]={{name,rejected:false}};save();show(id)}};document.querySelector('#reject').onclick=()=>{{labels[id]={{rejected:true}};save();show(id)}};document.querySelector('#split')?.addEventListener('click',()=>{{labels[id]={{split:true}};save();show(activeGroups().find(group=>group.parent===id).id)}});document.querySelector('#undo-split')?.addEventListener('click',()=>{{const parent=c.parent;delete labels[parent];Object.keys(labels).filter(key=>key.startsWith(parent+':')).forEach(key=>delete labels[key]);save();show(parent)}});const at=groups.findIndex(x=>x.id===id);document.querySelector('#previous').onclick=()=>show(groups[(at-1+groups.length)%groups.length].id);document.querySelector('#next').onclick=()=>show(groups[(at+1)%groups.length].id)}}
-document.querySelector('#show-unreviewed').onclick=()=>{{onlyUnreviewed=true;renderList()}};document.querySelector('#show-all').onclick=()=>{{onlyUnreviewed=false;renderList()}};
+function activeGroups(){{const result=[];DATA.clusters.forEach(group=>{{if(!labels[group.id]?.split){{result.push(group);return}}group.subclusters.forEach((subcluster,index)=>{{result.push({{id:`${{group.id}}:${{subcluster.id}}`,parent:group.id,size:subcluster.size,subclusters:[subcluster],merge_min:1,primary:subcluster.size>=DATA.minimumGroupSize,related:group.related,members:group.members.filter(face=>face.subcluster===index+1).map(face=>({{...face,subcluster:1}}))}})}})}});return result}}
+function listedGroups(){{return activeGroups().filter(c=>viewMode==='recovery'?!c.primary:(c.primary&&(viewMode!=='unreviewed'||!labels[c.id])))}}
+function renderList(){{list.innerHTML='';listedGroups().forEach(c=>{{const label=labels[c.id],b=document.createElement('button');b.className='cluster-button'+(current===c.id?' active':'');b.innerHTML=crop(c.members[0],true)+`<span><b>${{esc(label?.name||(label?.rejected?'Rejected':'Person '+c.id))}}</b><small>${{c.size}} faces · ${{c.subclusters.length}} subcluster${{c.subclusters.length===1?'':'s'}}</small></span>`;b.onclick=()=>{{suggestedName='';show(c.id)}};list.append(b)}});if(!list.children.length)list.innerHTML='<p>No groups in this view.</p>'}}
+function relatedMarkup(c,groups,label){{const related=(c.related||[]).map(item=>({{...item,group:groups.find(group=>group.id===item.id)}})).filter(item=>item.group).slice(0,10);if(!related.length)return'';return `<section class="related"><h3>Related groups</h3><div class="related-list">${{related.map(item=>`<button class="related-button" data-related="${{item.group.id}}">${{crop(item.group.members[0],true)}}<span><b>${{esc(labels[item.group.id]?.name||'Inspect group')}}</b><small>${{item.group.size}} faces · similarity ${{item.score.toFixed(2)}}</small></span></button>`).join('')}}</div></section>`}}
+function show(id){{current=id;const groups=activeGroups(),c=groups.find(x=>x.id===id),label=labels[id]||{{}};if(!c)return;renderList();const splitAction=c.parent?'<button id="undo-split" class="secondary">Restore merged group</button>':(c.subclusters.length>1?'<button id="split" class="secondary">Split into subclusters</button>':'');review.innerHTML=`<div class="review-head"><div><h2>${{esc(label.name||'Unlabeled person')}} <span class="badge">${{c.size}} faces</span></h2><p>${{c.subclusters.length}} strict subcluster${{c.subclusters.length===1?'':'s'}} · weakest subcluster link ${{c.merge_min.toFixed(3)}} · group ${{c.id}}</p></div><div><button id="previous" class="secondary">← Previous</button> <button id="next" class="secondary">Next →</button></div></div><div class="label-form"><input id="person-name" placeholder="Person's name" value="${{esc(label.name||suggestedName)}}"><button id="save-label">Name person</button><button id="reject" class="danger">Reject group</button>${{splitAction}}</div>${{relatedMarkup(c,groups,label)}}<div class="faces">${{c.members.slice(0,160).map(f=>`<figure><a href="${{f.preview}}" target="_blank">${{crop(f)}}</a><figcaption><strong>${{esc(f.filename)}}</strong><span>Subcluster ${{f.subcluster}} · ${{esc(f.album)}}${{f.year?' · '+f.year:''}}</span></figcaption></figure>`).join('')}}</div>${{c.size>160?`<p>Showing the first 160 of ${{c.size}} faces.</p>`:''}}`;document.querySelector('#save-label').onclick=()=>{{const name=document.querySelector('#person-name').value.trim();if(!name)return;labels[id]={{name,rejected:false}};suggestedName=name;save();show(id)}};document.querySelector('#reject').onclick=()=>{{labels[id]={{rejected:true}};save();show(id)}};document.querySelectorAll('[data-related]').forEach(button=>button.onclick=()=>{{suggestedName=label.name||suggestedName;show(button.dataset.related)}});document.querySelector('#split')?.addEventListener('click',()=>{{labels[id]={{split:true}};save();show(activeGroups().find(group=>group.parent===id).id)}});document.querySelector('#undo-split')?.addEventListener('click',()=>{{const parent=c.parent;delete labels[parent];Object.keys(labels).filter(key=>key.startsWith(parent+':')).forEach(key=>delete labels[key]);save();show(parent)}});const at=groups.findIndex(x=>x.id===id);document.querySelector('#previous').onclick=()=>{{suggestedName='';show(groups[(at-1+groups.length)%groups.length].id)}};document.querySelector('#next').onclick=()=>{{suggestedName='';show(groups[(at+1)%groups.length].id)}}}}
+document.querySelector('#show-unreviewed').onclick=()=>{{viewMode='unreviewed';renderList()}};document.querySelector('#show-all').onclick=()=>{{viewMode='all';renderList()}};document.querySelector('#show-recovery').onclick=()=>{{viewMode='recovery';renderList()}};
 document.querySelector('#export').onclick=()=>{{const groups=activeGroups(),people=groups.filter(group=>labels[group.id]?.name||labels[group.id]?.rejected).map(group=>({{group_id:group.id,...labels[group.id],subclusters:group.subclusters,face_ids:group.members.map(f=>f.face_id)}})),splits=Object.entries(labels).filter(([,label])=>label.split).map(([group_id])=>group_id);const blob=new Blob([JSON.stringify({{version:1,archive:DATA.archive,settings:{{threshold:DATA.threshold,merge_threshold:DATA.mergeThreshold,neighbors:DATA.neighbors,minimum_group_size:DATA.minimumGroupSize}},splits,people}},null,2)],{{type:'application/json'}}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='people-cluster-labels.json';a.click();URL.revokeObjectURL(a.href)}};
 renderList();if(DATA.clusters.length)show(DATA.clusters[0].id);</script></body></html>"""
     output.parent.mkdir(parents=True, exist_ok=True)

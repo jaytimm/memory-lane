@@ -34,4 +34,8 @@ saved in browser storage while working and can be exported as JSON. Proposed
 people can be rejected or split back into their strict subclusters. It does not
 modify photographs.
 
+Small groups remain available in the recovery view. Each proposed person also
+links to the nearest related groups so fragmented age or appearance clusters can
+be inspected and assigned the same name without lowering the global threshold.
+
 The Windows companion is built by the workflow in `.github/workflows`.
