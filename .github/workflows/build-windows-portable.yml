@@ -68,6 +68,8 @@ jobs:
           Copy-Item src\__init__.py,src\archive_data.py,src\clip_model.py,src\search.py,src\serve.py $destination
           Copy-Item "windows\Start Family Gallery.bat" "dist\Start Family Gallery.bat"
           Copy-Item "windows\README-WINDOWS.txt" "dist\README-WINDOWS.txt"
+          Copy-Item "windows\START HERE.txt" "dist\START HERE.txt"
+          Copy-Item "windows\VERSION.txt" "dist\VERSION.txt"
 
       - name: Smoke-test portable runtime
         shell: pwsh
@@ -89,6 +91,8 @@ jobs:
             -DestinationPath MemoryLane-Windows-x64.zip `
             -CompressionLevel Optimal
           Copy-Item "windows\Start Memory Lane from USB.bat" .
+          Copy-Item "windows\START HERE.txt" .
+          Copy-Item "windows\VERSION.txt" .
 
       - name: Publish permanent Windows release
         shell: pwsh
@@ -102,11 +106,11 @@ jobs:
 
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag MemoryLane-Windows-x64.zip "Start Memory Lane from USB.bat" `
+            gh release upload $tag MemoryLane-Windows-x64.zip "Start Memory Lane from USB.bat" "START HERE.txt" VERSION.txt `
               --clobber `
               --repo $env:GITHUB_REPOSITORY
           } else {
-            gh release create $tag MemoryLane-Windows-x64.zip "Start Memory Lane from USB.bat" `
+            gh release create $tag MemoryLane-Windows-x64.zip "Start Memory Lane from USB.bat" "START HERE.txt" VERSION.txt `
               --title "Memory Lane for Windows" `
               --notes "Portable Windows launcher for the local semantic image gallery. User images, indexes, and model files are not included." `
               --repo $env:GITHUB_REPOSITORY
