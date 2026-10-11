@@ -378,6 +378,8 @@ input, select, .quiet-button, .load-more {
 }
 .viewer-search-button:hover { background: #d05e3f; }
 .viewer-search-button:disabled { cursor: wait; opacity: .65; }
+.viewer-original-link { display: inline-flex; align-items: center; text-decoration: none; }
+.viewer-original-link[hidden] { display: none; }
 .face-status { max-width: 260px; text-align: right; }
 .face-layer { position: absolute; inset: 0; pointer-events: none; }
 .face-choice {

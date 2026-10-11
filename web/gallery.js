@@ -36,6 +36,7 @@
     viewerImage: document.querySelector("#viewer-image"),
     faceLayer: document.querySelector("#face-layer"),
     viewerStatus: document.querySelector("#face-status"),
+    openOriginal: document.querySelector("#open-original"),
     findSimilar: document.querySelector("#find-similar"),
     findFaces: document.querySelector("#find-faces"),
     viewerTitle: document.querySelector("#viewer-title"),
@@ -285,6 +286,8 @@
     elements.viewerImage.alt = photo.filename;
     elements.viewerTitle.textContent = photo.filename;
     elements.viewerAlbum.textContent = album.title;
+    elements.openOriginal.href = original;
+    elements.openOriginal.hidden = !originalsAvailable;
     elements.faceLayer.replaceChildren();
     elements.viewerStatus.textContent = "";
     elements.findSimilar.disabled = false;
