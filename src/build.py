@@ -212,6 +212,7 @@ def build_archive(
     copy2(WEB_DIR / "index.html", output_dir / "index.html")
     copy2(WEB_DIR / "gallery.css", assets_dir / "gallery.css")
     copy2(WEB_DIR / "gallery.js", assets_dir / "gallery.js")
+    copy2(WEB_DIR / "search-examples.js", assets_dir / "search-examples.js")
     (output_dir / "README.txt").write_text(
         "Family Photo Archive\n\n"
         "Open index.html in a modern web browser. No internet connection is required.\n"

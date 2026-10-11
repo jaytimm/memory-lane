@@ -11,6 +11,7 @@
     semanticQuery: document.querySelector("#semantic-query"),
     semanticSubmit: document.querySelector("#semantic-submit"),
     semanticStatus: document.querySelector("#semantic-status"),
+    searchExampleGroups: document.querySelector("#search-example-groups"),
     albumFilter: document.querySelector("#album-filter"),
     decadeFilter: document.querySelector("#decade-filter"),
     clear: document.querySelector("#clear-filters"),
@@ -98,6 +99,31 @@
       option.value = String(decade);
       option.textContent = `${decade}s`;
       elements.decadeFilter.append(option);
+    });
+  }
+
+  function initializeSearchExamples() {
+    const groups = window.MEMORY_LANE_SEARCH_EXAMPLES || [];
+    groups.forEach((group) => {
+      const section = document.createElement("section");
+      section.className = "search-example-group";
+      const title = document.createElement("strong");
+      title.textContent = group.title;
+      const buttons = document.createElement("div");
+      buttons.className = "search-example-buttons";
+      group.queries.forEach((query) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "search-example-button";
+        button.textContent = query;
+        button.addEventListener("click", () => {
+          elements.semanticQuery.value = query;
+          elements.semanticForm.requestSubmit();
+        });
+        buttons.append(button);
+      });
+      section.append(title, buttons);
+      elements.searchExampleGroups.append(section);
     });
   }
 
@@ -330,6 +356,7 @@
   });
 
   initializeFilters();
+  initializeSearchExamples();
   render();
   enableSemanticSearch();
 })();
