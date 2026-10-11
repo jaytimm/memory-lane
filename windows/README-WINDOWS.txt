@@ -1,17 +1,20 @@
 MEMORY LANE - WINDOWS USB EDITION
 =================================
 
-Keep these items together at the top level of the USB drive:
+Keep the originals and app separate:
 
-  FamilyPhotoArchive\
-  MemoryLane-Windows-x64.zip
-  Start Memory Lane from USB.bat
-  START HERE.txt
-  VERSION.txt
+  Family Photos\
+    45 original album folders
 
-The photographs and prepared FamilyPhotoArchive folder are copied to the drive
-first. Add the Memory Lane ZIP, launcher, and text files afterward. Do not unzip
-the ZIP.
+  Memory Lane\
+    Gallery\
+    MemoryLane-Windows-x64.zip
+    Start Memory Lane from USB.bat
+    START HERE.txt
+    VERSION.txt
+
+The photographs are copied into Family Photos first. Add the complete Memory Lane
+folder afterward. Do not unzip the ZIP.
 
 Double-click "Start Memory Lane from USB.bat". The first start prepares the app
 on that Windows computer. A small terminal window remains open while Memory Lane

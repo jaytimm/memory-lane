@@ -2,13 +2,15 @@
 setlocal
 set "USB_ROOT=%~dp0"
 set "PACKAGE=%USB_ROOT%MemoryLane-Windows-x64.zip"
-set "ARCHIVE=%USB_ROOT%FamilyPhotoArchive"
+set "ARCHIVE=%USB_ROOT%Gallery"
 set "INSTALL=%LOCALAPPDATA%\MemoryLane"
 set "APP=%INSTALL%\WindowsSearch"
 set "VERSION_FILE=%INSTALL%\package-version.txt"
 
 if not exist "%ARCHIVE%\index.html" (
-  echo FamilyPhotoArchive was not found on this USB drive.
+  echo The prepared Memory Lane Gallery was not found.
+  echo.
+  echo Expected: %ARCHIVE%\index.html
   pause
   exit /b 2
 )

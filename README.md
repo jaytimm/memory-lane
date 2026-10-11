@@ -21,3 +21,17 @@ python3 -m unittest discover -s tests -v
 ```
 
 The Windows companion is built by the workflow in `.github/workflows`.
+
+## Assemble a USB drive
+
+Keep the originals in `Family Photos/` and all generated app material in
+`Memory Lane/`. After the album folders have been copied, assemble the app side
+from Linux with:
+
+```bash
+./scripts/assemble-usb.sh "/media/user/USB" ./MemoryLane-Windows-x64.zip
+```
+
+The script copies the prepared gallery cache without duplicating the original
+photographs. The Windows launcher, ZIP, version, and start instructions are kept
+together inside `Memory Lane/`.
