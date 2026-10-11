@@ -128,6 +128,73 @@ def conservative_clusters(
     return clusters
 
 
+def candidate_identity_groups(
+    clusters: list[dict],
+    embeddings: np.ndarray,
+    merge_threshold: float = 0.64,
+    minimum_group_size: int = 8,
+) -> list[dict]:
+    """Combine strict clusters into broader, complete-link candidate identities."""
+    if not 0 < merge_threshold <= 1 or minimum_group_size < 2:
+        raise ValueError("Invalid identity-group settings")
+    if not clusters:
+        return []
+    centroids = []
+    for cluster in clusters:
+        centroid = embeddings[cluster["members"]].mean(axis=0)
+        norm = float(np.linalg.norm(centroid))
+        centroids.append(centroid / norm if norm else centroid)
+    centroid_matrix = np.stack(centroids)
+
+    # Clusters arrive largest-first. A new cluster joins the group whose existing
+    # subcluster centroids are all sufficiently similar. Requiring every link to
+    # clear the threshold prevents a chain of weak links from merging identities.
+    grouped_indices: list[list[int]] = []
+    for cluster_index in range(len(clusters)):
+        best: tuple[float, int] | None = None
+        for group_index, group in enumerate(grouped_indices):
+            similarities = centroid_matrix[cluster_index] @ centroid_matrix[group].T
+            if float(np.min(similarities)) < merge_threshold:
+                continue
+            score = float(np.mean(similarities))
+            if best is None or score > best[0]:
+                best = (score, group_index)
+        if best is None:
+            grouped_indices.append([cluster_index])
+        else:
+            grouped_indices[best[1]].append(cluster_index)
+
+    groups = []
+    for indices in grouped_indices:
+        size = sum(clusters[index]["size"] for index in indices)
+        if size < minimum_group_size:
+            continue
+        members = [row for index in indices for row in clusters[index]["members"]]
+        similarities = centroid_matrix[indices] @ centroid_matrix[indices].T
+        triangle = similarities[np.triu_indices(len(indices), 1)]
+        subcluster_ids = sorted(clusters[index]["id"] for index in indices)
+        group_id = hashlib.sha1("\n".join(subcluster_ids).encode()).hexdigest()[:12]
+        groups.append(
+            {
+                "id": group_id,
+                "members": members,
+                "size": size,
+                "subclusters": [
+                    {
+                        "id": clusters[index]["id"],
+                        "size": clusters[index]["size"],
+                        "members": clusters[index]["members"],
+                    }
+                    for index in indices
+                ],
+                "merge_min": float(np.min(triangle)) if triangle.size else 1.0,
+                "merge_median": float(np.median(triangle)) if triangle.size else 1.0,
+            }
+        )
+    groups.sort(key=lambda group: (-group["size"], group["id"]))
+    return groups
+
+
 def _asset_url(path: Path, output: Path) -> str:
     relative = os.path.relpath(path.resolve(), output.parent.resolve())
     return quote(Path(relative).as_posix(), safe="/()._-~")
@@ -140,6 +207,8 @@ def build_cluster_evaluation(
     neighbors: int = 6,
     minimum_size: int = 3,
     block_size: int = 512,
+    merge_threshold: float = 0.64,
+    minimum_group_size: int = 8,
 ) -> Path:
     archive, output = archive.resolve(), output.resolve()
     manifest = read_gallery_manifest(archive)
@@ -151,8 +220,17 @@ def build_cluster_evaluation(
         items, embeddings, threshold, neighbors, minimum_size, block_size
     )
 
+    groups = candidate_identity_groups(
+        clusters, embeddings, merge_threshold, minimum_group_size
+    )
+
     payload_clusters = []
-    for cluster in clusters:
+    for cluster in groups:
+        subcluster_by_row = {
+            row: position + 1
+            for position, subcluster in enumerate(cluster["subclusters"])
+            for row in subcluster["members"]
+        }
         members = []
         for row in cluster["members"]:
             face = items[row]
@@ -170,11 +248,20 @@ def build_cluster_evaluation(
                     "year": photo.get("date_start"),
                     "width": photo.get("width") or 1,
                     "height": photo.get("height") or 1,
+                    "subcluster": subcluster_by_row[row],
                 }
             )
         payload_clusters.append(
             {
-                **{key: value for key, value in cluster.items() if key != "members"},
+                **{
+                    key: value
+                    for key, value in cluster.items()
+                    if key not in ("members", "subclusters")
+                },
+                "subclusters": [
+                    {"id": subcluster["id"], "size": subcluster["size"]}
+                    for subcluster in cluster["subclusters"]
+                ],
                 "members": members,
             }
         )
@@ -185,10 +272,13 @@ def build_cluster_evaluation(
         "threshold": threshold,
         "neighbors": neighbors,
         "minimumSize": minimum_size,
-        "clusteredFaces": sum(cluster["size"] for cluster in clusters),
+        "mergeThreshold": merge_threshold,
+        "minimumGroupSize": minimum_group_size,
+        "strictClusterCount": len(clusters),
+        "clusteredFaces": sum(cluster["size"] for cluster in groups),
         "clusters": payload_clusters,
     }
-    title = "Face cluster review"
+    title = "People cluster review"
     document = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -213,21 +303,21 @@ figcaption{{padding:8px;font-size:.75rem}}figcaption strong,figcaption span{{dis
 .empty{{padding:35px;background:#fff;border-radius:10px}}.badge{{display:inline-block;padding:3px 8px;border-radius:99px;background:#e5e8e3;margin-left:5px;font-size:.8rem}}
 @media(max-width:760px){{main{{display:block}}aside{{max-height:35vh;border-right:0;border-bottom:1px solid #d9ddd8}}}}
 </style></head><body><header><h1>{escape(title)}</h1>
-<p><b>{len(clusters):,} candidate clusters</b> containing <b>{payload['clusteredFaces']:,}</b> of {len(items):,} faces. Reciprocal top-{neighbors} neighbors; minimum similarity {threshold:.2f}; minimum cluster size {minimum_size}.</p>
-<p>Name or reject each cluster once. Decisions stay in this browser until exported; photographs are not modified.</p>
-<div class="toolbar"><button id="export">Export labels</button><button id="show-unreviewed" class="secondary">Unreviewed</button><button id="show-all" class="secondary">All clusters</button></div>
+<p><b>{len(groups):,} candidate people</b> containing <b>{payload['clusteredFaces']:,}</b> of {len(items):,} faces. Built from {len(clusters):,} strict clusters; cluster merge similarity {merge_threshold:.2f}; minimum visible group size {minimum_group_size}.</p>
+<p>Name or reject each proposed person once. Related hat, age, and pose subclusters are grouped automatically. Decisions stay in this browser until exported; photographs are not modified.</p>
+<div class="toolbar"><button id="export">Export labels</button><button id="show-unreviewed" class="secondary">Unreviewed</button><button id="show-all" class="secondary">All people</button></div>
 </header><main><aside><div class="cluster-list" id="cluster-list"></div></aside>
 <section class="review" id="review"><p class="empty">Choose a cluster to inspect.</p></section></main>
 <script>const DATA={json.dumps(payload, ensure_ascii=False, separators=(',', ':'))};
-const KEY=`memory-lane-clusters:${{DATA.archive}}:${{DATA.threshold}}:${{DATA.neighbors}}`,labels=JSON.parse(localStorage.getItem(KEY)||'{{}}');
+const KEY=`memory-lane-people:${{DATA.archive}}:${{DATA.threshold}}:${{DATA.mergeThreshold}}:${{DATA.neighbors}}`,labels=JSON.parse(localStorage.getItem(KEY)||'{{}}');
 const list=document.querySelector('#cluster-list'),review=document.querySelector('#review');let current=null,onlyUnreviewed=true;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));
 function crop(face,mini=false){{const [bx,by,bw,bh]=face.bbox,p=.42,x=Math.max(0,bx-bw*p),y=Math.max(0,by-bh*p),w=Math.min(1-x,bw*(1+2*p)),h=Math.min(1-y,bh*(1+2*p));return `<svg class="${{mini?'mini':''}}" viewBox="${{x*face.width}} ${{y*face.height}} ${{w*face.width}} ${{h*face.height}}" preserveAspectRatio="xMidYMid slice"><image href="${{face.preview}}" width="${{face.width}}" height="${{face.height}}"/></svg>`}}
 function save(){{localStorage.setItem(KEY,JSON.stringify(labels));renderList();}}
-function renderList(){{list.innerHTML='';DATA.clusters.filter(c=>!onlyUnreviewed||!labels[c.id]).forEach(c=>{{const label=labels[c.id],b=document.createElement('button');b.className='cluster-button'+(current===c.id?' active':'');b.innerHTML=crop(c.members[0],true)+`<span><b>${{esc(label?.name||(label?.rejected?'Rejected':'Cluster '+c.id))}}</b><small>${{c.size}} faces · cohesion ${{c.cohesion_median.toFixed(2)}}</small></span>`;b.onclick=()=>show(c.id);list.append(b)}});if(!list.children.length)list.innerHTML='<p>Every candidate cluster has been reviewed.</p>'}}
-function show(id){{current=id;const c=DATA.clusters.find(x=>x.id===id),label=labels[id]||{{}};renderList();review.innerHTML=`<div class="review-head"><div><h2>${{esc(label.name||'Unlabeled cluster')}} <span class="badge">${{c.size}} faces</span></h2><p>Median cohesion ${{c.cohesion_median.toFixed(3)}} · weakest member ${{c.cohesion_min.toFixed(3)}} · cluster ${{c.id}}</p></div><div><button id="previous" class="secondary">← Previous</button> <button id="next" class="secondary">Next →</button></div></div><div class="label-form"><input id="person-name" placeholder="Person's name" value="${{esc(label.name||'')}}"><select id="variant"><option value="">No profile label</option>${{['young','adult','profile','other'].map(v=>`<option value="${{v}}" ${{label.variant===v?'selected':''}}>${{v[0].toUpperCase()+v.slice(1)}}</option>`).join('')}}</select><button id="save-label">Name cluster</button><button id="reject" class="danger">Reject cluster</button></div><div class="faces">${{c.members.slice(0,160).map(f=>`<figure><a href="${{f.preview}}" target="_blank">${{crop(f)}}</a><figcaption><strong>${{esc(f.filename)}}</strong><span>${{esc(f.album)}}${{f.year?' · '+f.year:''}}</span></figcaption></figure>`).join('')}}</div>${{c.size>160?`<p>Showing the first 160 of ${{c.size}} faces.</p>`:''}}`;document.querySelector('#save-label').onclick=()=>{{const name=document.querySelector('#person-name').value.trim();if(!name)return;labels[id]={{name,variant:document.querySelector('#variant').value,rejected:false}};save();show(id)}};document.querySelector('#reject').onclick=()=>{{labels[id]={{rejected:true}};save();show(id)}};const at=DATA.clusters.findIndex(x=>x.id===id);document.querySelector('#previous').onclick=()=>show(DATA.clusters[(at-1+DATA.clusters.length)%DATA.clusters.length].id);document.querySelector('#next').onclick=()=>show(DATA.clusters[(at+1)%DATA.clusters.length].id)}}
+function renderList(){{list.innerHTML='';DATA.clusters.filter(c=>!onlyUnreviewed||!labels[c.id]).forEach(c=>{{const label=labels[c.id],b=document.createElement('button');b.className='cluster-button'+(current===c.id?' active':'');b.innerHTML=crop(c.members[0],true)+`<span><b>${{esc(label?.name||(label?.rejected?'Rejected':'Person '+c.id))}}</b><small>${{c.size}} faces · ${{c.subclusters.length}} subcluster${{c.subclusters.length===1?'':'s'}}</small></span>`;b.onclick=()=>show(c.id);list.append(b)}});if(!list.children.length)list.innerHTML='<p>Every candidate person has been reviewed.</p>'}}
+function show(id){{current=id;const c=DATA.clusters.find(x=>x.id===id),label=labels[id]||{{}};renderList();review.innerHTML=`<div class="review-head"><div><h2>${{esc(label.name||'Unlabeled person')}} <span class="badge">${{c.size}} faces</span></h2><p>${{c.subclusters.length}} strict subcluster${{c.subclusters.length===1?'':'s'}} · weakest subcluster link ${{c.merge_min.toFixed(3)}} · group ${{c.id}}</p></div><div><button id="previous" class="secondary">← Previous</button> <button id="next" class="secondary">Next →</button></div></div><div class="label-form"><input id="person-name" placeholder="Person's name" value="${{esc(label.name||'')}}"><button id="save-label">Name person</button><button id="reject" class="danger">Reject group</button></div><div class="faces">${{c.members.slice(0,160).map(f=>`<figure><a href="${{f.preview}}" target="_blank">${{crop(f)}}</a><figcaption><strong>${{esc(f.filename)}}</strong><span>Subcluster ${{f.subcluster}} · ${{esc(f.album)}}${{f.year?' · '+f.year:''}}</span></figcaption></figure>`).join('')}}</div>${{c.size>160?`<p>Showing the first 160 of ${{c.size}} faces.</p>`:''}}`;document.querySelector('#save-label').onclick=()=>{{const name=document.querySelector('#person-name').value.trim();if(!name)return;labels[id]={{name,rejected:false}};save();show(id)}};document.querySelector('#reject').onclick=()=>{{labels[id]={{rejected:true}};save();show(id)}};const at=DATA.clusters.findIndex(x=>x.id===id);document.querySelector('#previous').onclick=()=>show(DATA.clusters[(at-1+DATA.clusters.length)%DATA.clusters.length].id);document.querySelector('#next').onclick=()=>show(DATA.clusters[(at+1)%DATA.clusters.length].id)}}
 document.querySelector('#show-unreviewed').onclick=()=>{{onlyUnreviewed=true;renderList()}};document.querySelector('#show-all').onclick=()=>{{onlyUnreviewed=false;renderList()}};
-document.querySelector('#export').onclick=()=>{{const clusters=Object.entries(labels).map(([cluster_id,label])=>({{cluster_id,...label,face_ids:DATA.clusters.find(c=>c.id===cluster_id)?.members.map(f=>f.face_id)||[]}}));const blob=new Blob([JSON.stringify({{version:1,archive:DATA.archive,settings:{{threshold:DATA.threshold,neighbors:DATA.neighbors,minimum_size:DATA.minimumSize}},clusters}},null,2)],{{type:'application/json'}}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='people-cluster-labels.json';a.click();URL.revokeObjectURL(a.href)}};
+document.querySelector('#export').onclick=()=>{{const people=Object.entries(labels).map(([group_id,label])=>{{const group=DATA.clusters.find(c=>c.id===group_id);return{{group_id,...label,subclusters:group?.subclusters||[],face_ids:group?.members.map(f=>f.face_id)||[]}}}});const blob=new Blob([JSON.stringify({{version:1,archive:DATA.archive,settings:{{threshold:DATA.threshold,merge_threshold:DATA.mergeThreshold,neighbors:DATA.neighbors,minimum_group_size:DATA.minimumGroupSize}},people}},null,2)],{{type:'application/json'}}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='people-cluster-labels.json';a.click();URL.revokeObjectURL(a.href)}};
 renderList();if(DATA.clusters.length)show(DATA.clusters[0].id);</script></body></html>"""
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(document, encoding="utf-8")
@@ -243,6 +333,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--neighbors", type=int, default=6)
     result.add_argument("--minimum-size", type=int, default=3)
     result.add_argument("--block-size", type=int, default=512)
+    result.add_argument("--merge-threshold", type=float, default=0.64)
+    result.add_argument("--minimum-group-size", type=int, default=8)
     return result
 
 
@@ -257,6 +349,8 @@ def main(argv: list[str] | None = None) -> int:
             args.neighbors,
             args.minimum_size,
             args.block_size,
+            args.merge_threshold,
+            args.minimum_group_size,
         )
     except (OSError, RuntimeError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)

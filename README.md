@@ -28,7 +28,9 @@ python3 -m src.cluster_faces --archive ./PhotoArchive
 ```
 
 The generated `face-cluster-evaluation.html` is a curator tool, not part of the
-family-facing gallery. Cluster names are saved in browser storage while working
-and can be exported as JSON. It does not modify photographs.
+family-facing gallery. It first builds strict face clusters, then groups related
+age, pose, and appearance clusters into broader candidate people. Names are
+saved in browser storage while working and can be exported as JSON. It does not
+modify photographs.
 
 The Windows companion is built by the workflow in `.github/workflows`.

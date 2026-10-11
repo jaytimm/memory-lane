@@ -9,7 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from PIL import Image
 
 from src.build import build_archive
-from src.cluster_faces import conservative_clusters, nearest_faces
+from src.cluster_faces import candidate_identity_groups, conservative_clusters, nearest_faces
 from src.embed import _existing_vectors, _save_partial
 from src.ingest import album_year_range, stable_image_id
 from src.metadata import match_records_to_folders, read_album_records
@@ -157,6 +157,25 @@ class SemanticRankingTests(unittest.TestCase):
         nearest, _ = nearest_faces(embeddings, ["one", "one", "two"], neighbors=1)
         self.assertEqual(nearest[:2, 0].tolist(), [2, 2])
         self.assertIn(int(nearest[2, 0]), (0, 1))
+
+    def test_candidate_identity_groups_merge_related_strict_clusters(self):
+        import numpy as np
+
+        embeddings = np.asarray(
+            [[1, 0], [.99, .01], [.95, .05], [.94, .06], [0, 1], [.01, .99]],
+            dtype=np.float32,
+        )
+        embeddings /= np.linalg.norm(embeddings, axis=1, keepdims=True)
+        strict = [
+            {"id": "adult", "members": [0, 1], "size": 2},
+            {"id": "hat", "members": [2, 3], "size": 2},
+            {"id": "other", "members": [4, 5], "size": 2},
+        ]
+        groups = candidate_identity_groups(
+            strict, embeddings, merge_threshold=.9, minimum_group_size=2
+        )
+        self.assertEqual([group["size"] for group in groups], [4, 2])
+        self.assertEqual(len(groups[0]["subclusters"]), 2)
 
     def test_cosine_ranking_and_metadata_filters(self):
         import numpy as np
