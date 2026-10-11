@@ -6,27 +6,26 @@ window.MEMORY_LANE_SEARCH_EXAMPLES = [
       "two smiling faces",
       "tired",
       "hugs",
-      "arms raised",
-      "people standing outside a house",
-      "children playing outside"
+      "arms raised"
     ]
   },
   {
     "title": "Colors and things",
     "queries": [
-      "yellow tents",
-      "green hats",
+      "camping",
+      "red hats",
+      "an RV",
       "birthday cake and candles"
     ]
   },
   {
     "title": "People doing things",
     "queries": [
-      "children playing in the snow",
+      "children in the snow",
+      "Christmas cookie decorating",
+      "football",
       "guitar playing",
-      "people opening presents",
-      "people swimming in a lake",
-      "dogs playing in the backyard"
+      "people swimming in a lake"
     ]
   },
   {

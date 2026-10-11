@@ -3,6 +3,7 @@ setlocal
 set "USB_ROOT=%~dp0"
 set "PACKAGE=%USB_ROOT%MemoryLane-Windows-x64.zip"
 set "ARCHIVE=%USB_ROOT%Gallery"
+set "PHOTOS=%USB_ROOT%..\Family Photos"
 set "INSTALL=%LOCALAPPDATA%\MemoryLane"
 set "APP=%INSTALL%\WindowsSearch"
 set "VERSION_FILE=%INSTALL%\package-version.txt"
@@ -17,6 +18,14 @@ if not exist "%ARCHIVE%\index.html" (
 
 if not exist "%PACKAGE%" (
   echo MemoryLane-Windows-x64.zip was not found on this USB drive.
+  pause
+  exit /b 2
+)
+
+if not exist "%PHOTOS%\" (
+  echo The Family Photos folder was not found beside Memory Lane.
+  echo.
+  echo Expected: %PHOTOS%
   pause
   exit /b 2
 )
@@ -49,7 +58,7 @@ goto launch
 
 :launch
 pushd "%APP%"
-runtime\python.exe -m src.serve --archive "%ARCHIVE%"
+runtime\python.exe -m src.serve --archive "%ARCHIVE%" --photos "%PHOTOS%"
 set "RESULT=%ERRORLEVEL%"
 popd
 

@@ -53,6 +53,7 @@
   let searchDescription = "";
   let imageSearchAvailable = false;
   let faceSearchAvailable = false;
+  let originalsAvailable = false;
 
   function plural(number, word) {
     return `${number.toLocaleString()} ${word}${number === 1 ? "" : "s"}`;
@@ -275,7 +276,12 @@
     viewerIndex = index;
     const photo = filteredPhotos[index];
     const album = albums.get(photo.album_id);
-    elements.viewerImage.src = photo.preview;
+    const original = `/api/original/${encodeURIComponent(photo.id)}`;
+    elements.viewerImage.onerror = () => {
+      elements.viewerImage.onerror = null;
+      elements.viewerImage.src = photo.preview;
+    };
+    elements.viewerImage.src = originalsAvailable ? original : photo.preview;
     elements.viewerImage.alt = photo.filename;
     elements.viewerTitle.textContent = photo.filename;
     elements.viewerAlbum.textContent = album.title;
@@ -306,6 +312,7 @@
       if (!status.available) return;
       imageSearchAvailable = true;
       faceSearchAvailable = Boolean(status.face_search);
+      originalsAvailable = Boolean(status.originals_available);
       elements.semanticForm.hidden = false;
       if (status.face_search) {
         elements.summary.textContent = `${plural(data.photos.length, "photograph")} · ${plural(data.albums.length, "album")} · ${plural(status.face_count, "face")}`;

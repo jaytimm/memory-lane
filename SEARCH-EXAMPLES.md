@@ -10,22 +10,21 @@ gallery. Clicking an example runs it immediately.
 - `tired`
 - `hugs`
 - `arms raised`
-- `people standing outside a house`
-- `children playing outside`
 
 ## Colors and things
 
-- `yellow tents`
-- `green hats`
+- `camping`
+- `red hats`
+- `an RV`
 - `birthday cake and candles`
 
 ## People doing things
 
-- `children playing in the snow`
+- `children in the snow`
+- `Christmas cookie decorating`
+- `football`
 - `guitar playing`
-- `people opening presents`
 - `people swimming in a lake`
-- `dogs playing in the backyard`
 
 ## Something specific
 

@@ -110,6 +110,7 @@ def build_embeddings(archive: Path, batch_size: int = 8) -> dict:
     preserve_portable_weights(cache_dir)
     identity = model_identity()
     existing = _existing_vectors(search_dir, identity)
+    existing_by_sha = {sha256: vector for (_, sha256), vector in existing.items()}
 
     photos = manifest.get("photos", [])
     vectors: list[np.ndarray | None] = [None] * len(photos)
@@ -117,6 +118,10 @@ def build_embeddings(archive: Path, batch_size: int = 8) -> dict:
     reused = 0
     for index, photo in enumerate(photos):
         cached = existing.get((photo["id"], photo["sha256"]))
+        if cached is None:
+            # A renamed file has a new gallery id but identical pixels and can
+            # safely reuse the same CLIP image vector.
+            cached = existing_by_sha.get(photo["sha256"])
         if cached is not None:
             vectors[index] = cached
             reused += 1

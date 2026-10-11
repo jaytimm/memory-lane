@@ -19,6 +19,7 @@ from src.search import (
     rank_embeddings,
 )
 from src.serve import (
+    original_photo_paths,
     parse_face_search_request,
     parse_photo_faces_request,
     parse_search_request,
@@ -130,6 +131,31 @@ class BuildIntegrationTests(unittest.TestCase):
 
 
 class SemanticRankingTests(unittest.TestCase):
+    def test_original_photo_paths_stay_inside_photo_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "archive"
+            assets = archive / "assets"
+            photos = root / "photos"
+            assets.mkdir(parents=True)
+            (photos / "album").mkdir(parents=True)
+            expected = photos / "album" / "photo.jpg"
+            expected.write_bytes(b"photo")
+            manifest = {
+                "photos": [
+                    {"id": "safe", "relative_source_path": "album/photo.jpg"},
+                    {"id": "escape", "relative_source_path": "../outside.jpg"},
+                ]
+            }
+            (assets / "manifest.js").write_text(
+                "window.FAMILY_PHOTO_DATA = " + json.dumps(manifest) + ";\n",
+                encoding="utf-8",
+            )
+
+            resolved = original_photo_paths(archive, photos)
+
+        self.assertEqual(resolved, {"safe": expected})
+
     def test_cosine_ranking_and_metadata_filters(self):
         import numpy as np
 

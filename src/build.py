@@ -58,13 +58,24 @@ def _write_json_atomic(path: Path, value: dict) -> None:
 def _process_source(task: tuple) -> tuple[dict | None, dict | None, bool, str | None]:
     source, cached, output_dir, copy_originals = task
     relative_key = source.relative_path.as_posix()
-    unchanged = bool(
+    metadata_match = bool(
         cached
         and cached.get("sha256")
         and cached.get("size") == source.size
         and cached.get("mtime_ns") == source.mtime_ns
     )
-    file_hash = cached["sha256"] if unchanged else content_hash(source.path)
+    size_match = bool(
+        cached and cached.get("sha256") and cached.get("size") == source.size
+    )
+    checked_hash = None
+    if size_match and not metadata_match:
+        # FAT/exFAT timestamps have coarser precision than Linux timestamps.
+        # Verify content before discarding an otherwise reusable derivative.
+        checked_hash = content_hash(source.path)
+    unchanged = metadata_match or bool(
+        checked_hash is not None and checked_hash == cached["sha256"]
+    )
+    file_hash = cached["sha256"] if unchanged else (checked_hash or content_hash(source.path))
     image_id = stable_image_id(file_hash, relative_key)
     thumbnail_rel = Path("thumbnails") / f"{image_id}.webp"
     preview_rel = Path("previews") / f"{image_id}.jpg"
@@ -98,7 +109,10 @@ def _process_source(task: tuple) -> tuple[dict | None, dict | None, bool, str | 
         "album_id": source.album_folder,
         "filename": source.path.name,
         "relative_source_path": relative_key,
-        "original": _asset_url(original_rel) if copy_originals else None,
+        # Keep the source-relative location even when originals live outside
+        # the generated gallery. Indexing can temporarily link that photo root,
+        # while the local server exposes it through its configured --photos path.
+        "original": _asset_url(original_rel),
         "thumbnail": _asset_url(thumbnail_rel),
         "preview": _asset_url(preview_rel),
         "width": derivative_metadata.get("width"),
@@ -241,7 +255,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--no-copy-originals",
         action="store_true",
-        help="Omit original files (useful for a quick development build)",
+        help="Do not duplicate original files inside the generated gallery",
     )
     result.add_argument(
         "--workers",

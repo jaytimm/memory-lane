@@ -6,11 +6,15 @@ import argparse
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
+import mimetypes
 from pathlib import Path
+import shutil
 import sys
 from threading import Timer
+from urllib.parse import quote, unquote, urlsplit
 import webbrowser
 
+from .archive_data import read_gallery_manifest
 from .search import FaceSearchIndex, SemanticSearchEngine
 
 
@@ -74,11 +78,30 @@ def parse_face_search_request(payload: object) -> tuple[str, int]:
     return face_id, min(100, max(1, top_k))
 
 
+def original_photo_paths(archive: Path, photos_root: Path) -> dict[str, Path]:
+    photos_root = photos_root.resolve()
+    originals: dict[str, Path] = {}
+    manifest = read_gallery_manifest(archive)
+    for photo in manifest.get("photos", []):
+        relative = Path(photo["relative_source_path"])
+        if relative.is_absolute() or ".." in relative.parts:
+            continue
+        target = (photos_root / relative).resolve()
+        if target.is_relative_to(photos_root) and target.is_file():
+            originals[photo["id"]] = target
+    return originals
+
+
 def make_handler(
     archive: Path,
     engine: SemanticSearchEngine,
     face_index: FaceSearchIndex | None = None,
+    photos_root: Path | None = None,
 ):
+    originals: dict[str, Path] = {}
+    if photos_root is not None:
+        originals = original_photo_paths(archive, photos_root)
+
     class GalleryHandler(SimpleHTTPRequestHandler):
         def log_message(self, format: str, *args) -> None:
             # Keep the family-facing launcher quiet; explicit startup/errors remain visible.
@@ -94,7 +117,8 @@ def make_handler(
             self.wfile.write(body)
 
         def do_GET(self) -> None:
-            if self.path == "/api/status":
+            request_path = urlsplit(self.path).path
+            if request_path == "/api/status":
                 self._json(
                     200,
                     {
@@ -103,8 +127,28 @@ def make_handler(
                         "model": engine.metadata["model"],
                         "face_search": face_index is not None,
                         "face_count": face_index.face_count if face_index else 0,
+                        "originals_available": bool(originals),
                     },
                 )
+                return
+            if request_path.startswith("/api/original/"):
+                photo_id = unquote(request_path.removeprefix("/api/original/"))
+                target = originals.get(photo_id)
+                if target is None:
+                    self.send_error(404, "Original photograph not found")
+                    return
+                content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(target.stat().st_size))
+                self.send_header(
+                    "Content-Disposition",
+                    f"inline; filename*=UTF-8''{quote(target.name)}",
+                )
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                with target.open("rb") as source:
+                    shutil.copyfileobj(source, self.wfile)
                 return
             super().do_GET()
 
@@ -152,7 +196,13 @@ def make_handler(
     return partial(GalleryHandler, directory=str(archive))
 
 
-def serve(archive: Path, host: str, port: int, open_browser: bool = True) -> None:
+def serve(
+    archive: Path,
+    host: str,
+    port: int,
+    open_browser: bool = True,
+    photos_root: Path | None = None,
+) -> None:
     archive = archive.resolve()
     if not (archive / "index.html").exists():
         raise ValueError(f"Gallery not found: {archive}")
@@ -163,7 +213,9 @@ def serve(archive: Path, host: str, port: int, open_browser: bool = True) -> Non
         print(f"Loaded {face_index.face_count:,} indexed faces.", flush=True)
     except (OSError, ValueError):
         face_index = None
-    server = ThreadingHTTPServer((host, port), make_handler(archive, engine, face_index))
+    server = ThreadingHTTPServer(
+        (host, port), make_handler(archive, engine, face_index, photos_root)
+    )
     actual_port = server.server_address[1]
     url = f"http://{host}:{actual_port}/"
     print(f"Family Photo Archive is ready: {url}", flush=True)
@@ -181,6 +233,7 @@ def serve(archive: Path, host: str, port: int, open_browser: bool = True) -> Non
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--archive", required=True, type=Path)
+    result.add_argument("--photos", type=Path, help="Folder containing the original album folders")
     result.add_argument("--host", default="127.0.0.1")
     result.add_argument("--port", type=int, default=8765)
     result.add_argument("--no-browser", action="store_true")
@@ -193,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Error: --port must be between 0 and 65535", file=sys.stderr)
         return 2
     try:
-        serve(args.archive, args.host, args.port, not args.no_browser)
+        serve(args.archive, args.host, args.port, not args.no_browser, args.photos)
     except (OSError, RuntimeError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2

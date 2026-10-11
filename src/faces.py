@@ -130,6 +130,12 @@ def build_face_index(
         "minimum_detected_face": 22,
     }
     cached, groups = _read_cached_groups(search_dir, identity)
+    cached_shas = {sha256 for _, sha256 in cached}
+    groups_by_sha: dict[str, list[tuple[dict, np.ndarray]]] = {}
+    for (_, sha256), entries in groups.items():
+        groups_by_sha.setdefault(sha256, entries)
+
+    cv2.setNumThreads(1)
 
     detector = cv2.FaceDetectorYN.create(
         str(detector_model), "", (320, 320), confidence, 0.3, 5000
@@ -148,6 +154,22 @@ def build_face_index(
         if key in cached:
             for item, vector in groups.get(key, []):
                 items.append(item)
+                vectors.append(vector)
+            reused += 1
+        elif photo["sha256"] in cached_shas:
+            # Renames change gallery ids but not face locations or vectors.
+            # Reuse the cached faces while attaching them to the new photo id.
+            for face_number, (item, vector) in enumerate(
+                groups_by_sha.get(photo["sha256"], [])
+            ):
+                items.append(
+                    {
+                        **item,
+                        "id": f"{photo['id']}:{face_number}",
+                        "photo_id": photo["id"],
+                        "photo_sha256": photo["sha256"],
+                    }
+                )
                 vectors.append(vector)
             reused += 1
         else:
