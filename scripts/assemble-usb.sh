@@ -51,6 +51,7 @@ cp -p "$windows_package" "$app_root/MemoryLane-Windows-x64.zip"
 cp -p "$project_root/windows/Start Memory Lane from USB.bat" "$app_root/"
 cp -p "$project_root/windows/START HERE.txt" "$app_root/"
 cp -p "$project_root/windows/VERSION.txt" "$app_root/"
+cp -p "$project_root/USB-README.txt" "$usb_root/README - MEMORY LANE.txt"
 
 echo ""
 echo "Memory Lane assembled successfully."
