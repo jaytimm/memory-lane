@@ -35,3 +35,7 @@ from Linux with:
 The script copies the prepared gallery cache without duplicating the original
 photographs. The Windows launcher, ZIP, version, and start instructions are kept
 together inside `Memory Lane/`.
+
+For later photo additions and corrections, follow
+[`PHOTO-UPDATE-RUNBOOK.md`](PHOTO-UPDATE-RUNBOOK.md). It documents the safe
+single-worker incremental rebuild and the external-drive sandbox caveat.
