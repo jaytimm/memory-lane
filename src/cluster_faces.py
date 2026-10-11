@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 from html import escape
 import json
@@ -151,27 +152,30 @@ def build_cluster_evaluation(
         items, embeddings, threshold, neighbors, minimum_size, block_size
     )
 
+    face_rows: list[dict | None] = []
+    for row, face in enumerate(items):
+        photo = photos.get(face["photo_id"])
+        if not photo:
+            face_rows.append(None)
+            continue
+        face_rows.append(
+            {
+                "row": row,
+                "face_id": face["id"],
+                "photo_id": face["photo_id"],
+                "bbox": face["bbox"],
+                "preview": _asset_url(archive / photo["preview"], output),
+                "filename": photo["filename"],
+                "album": photo["album_id"],
+                "year": photo.get("date_start"),
+                "width": photo.get("width") or 1,
+                "height": photo.get("height") or 1,
+            }
+        )
+
     payload_clusters = []
     for cluster in clusters:
-        members = []
-        for row in cluster["members"]:
-            face = items[row]
-            photo = photos.get(face["photo_id"])
-            if not photo:
-                continue
-            members.append(
-                {
-                    "face_id": face["id"],
-                    "photo_id": face["photo_id"],
-                    "bbox": face["bbox"],
-                    "preview": _asset_url(archive / photo["preview"], output),
-                    "filename": photo["filename"],
-                    "album": photo["album_id"],
-                    "year": photo.get("date_start"),
-                    "width": photo.get("width") or 1,
-                    "height": photo.get("height") or 1,
-                }
-            )
+        members = [face_rows[row] for row in cluster["members"] if face_rows[row]]
         payload_clusters.append(
             {
                 **{key: value for key, value in cluster.items() if key != "members"},
@@ -186,6 +190,11 @@ def build_cluster_evaluation(
         "neighbors": neighbors,
         "minimumSize": minimum_size,
         "clusteredFaces": sum(cluster["size"] for cluster in clusters),
+        "embeddingDimension": int(embeddings.shape[1]),
+        "embeddings": base64.b64encode(
+            np.asarray(embeddings, dtype="<f4").tobytes()
+        ).decode("ascii"),
+        "faces": [face for face in face_rows if face],
         "clusters": payload_clusters,
     }
     title = "Face cluster labeling"
@@ -212,6 +221,10 @@ figure{{margin:0;background:#fff;border-radius:9px;overflow:hidden}}figure a{{di
 figcaption{{padding:8px;font-size:.75rem}}figcaption strong,figcaption span{{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}figcaption span{{color:var(--muted)}}
 .empty{{padding:35px;background:#fff;border-radius:10px}}.badge{{display:inline-block;padding:3px 8px;border-radius:99px;background:#e5e8e3;margin-left:5px;font-size:.8rem}}
 .progress{{font-weight:700;color:var(--green)}}
+.recovery-dialog{{width:min(1400px,96vw);height:92vh;border:0;border-radius:12px;padding:0;background:var(--paper)}}.recovery-dialog::backdrop{{background:#17201dcc}}
+.recovery-head{{position:sticky;top:0;z-index:2;background:#fff;border-bottom:1px solid #d9ddd8;padding:18px 22px}}.recovery-title{{display:flex;justify-content:space-between;gap:15px;align-items:start}}
+.recovery-title h2{{margin:0}}.recovery-actions{{display:flex;flex-wrap:wrap;gap:8px;margin-top:13px}}.recovery-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:11px;padding:20px}}
+.recovery-card{{position:relative;display:block;background:#fff;border-radius:9px;overflow:hidden;cursor:pointer}}.recovery-card input{{position:absolute;z-index:1;top:8px;left:8px;width:21px;height:21px;accent-color:var(--accent)}}.recovery-card:has(input:checked){{outline:4px solid var(--accent)}}.recovery-card span{{display:block;padding:7px;font-size:.75rem;color:var(--muted)}}
 @media(max-width:760px){{main{{display:block}}aside{{max-height:35vh;border-right:0;border-bottom:1px solid #d9ddd8}}}}
 </style></head><body><header><h1>{escape(title)}</h1>
 <p><b>{len(clusters):,} conservative clusters</b> containing <b>{payload['clusteredFaces']:,}</b> of {len(items):,} indexed faces. Label each useful cluster once; reuse the same name for the same person at different ages or appearances.</p>
@@ -219,11 +232,27 @@ figcaption{{padding:8px;font-size:.75rem}}figcaption strong,figcaption span{{dis
 <div class="toolbar"><button id="export">Export labels</button><button id="show-unreviewed" class="secondary">Unreviewed</button><button id="show-all" class="secondary">All clusters</button><button id="show-named" class="secondary">Named</button><button id="show-rejected" class="secondary">Rejected</button></div>
 </header><main><aside><div class="cluster-list" id="cluster-list"></div></aside>
 <section class="review" id="review"><p class="empty">Choose a cluster to inspect.</p></section></main>
+<dialog id="recovery-dialog" class="recovery-dialog"><div class="recovery-head"><div class="recovery-title"><div><h2 id="recovery-title"></h2><p id="recovery-status"></p></div><button id="close-recovery" class="secondary">Close</button></div><div class="recovery-actions"><button id="select-ten" class="secondary">Select top 10</button><button id="accept-recovery">Add selected</button><button id="dismiss-recovery" class="danger">Not this person</button><button id="undo-recovery" class="secondary">Undo last batch</button></div></div><div id="recovery-grid" class="recovery-grid"></div></dialog>
 <script>const DATA={json.dumps(payload, ensure_ascii=False, separators=(',', ':'))};
 const KEY=`memory-lane-strict-labels:${{DATA.archive}}:${{DATA.threshold}}:${{DATA.neighbors}}:${{DATA.minimumSize}}`,OLD_KEY=`memory-lane-clusters:${{DATA.archive}}:${{DATA.threshold}}:${{DATA.neighbors}}`,labels=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem(OLD_KEY)||'{{}}');
-const list=document.querySelector('#cluster-list'),review=document.querySelector('#review'),progress=document.querySelector('#progress');let current=null,viewMode='unreviewed';
+const RECOVERY_KEY=KEY+':recovery',recovery=JSON.parse(localStorage.getItem(RECOVERY_KEY)||'{{"accepted":{{}},"dismissed":{{}}}}');recovery.accepted??={{}};recovery.dismissed??={{}};
+const list=document.querySelector('#cluster-list'),review=document.querySelector('#review'),progress=document.querySelector('#progress'),recoveryDialog=document.querySelector('#recovery-dialog'),recoveryGrid=document.querySelector('#recovery-grid'),recoveryTitle=document.querySelector('#recovery-title'),recoveryStatus=document.querySelector('#recovery-status');let current=null,viewMode='unreviewed',activeRecoveryName='',vectorData=null;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));
 function crop(face,mini=false){{const [bx,by,bw,bh]=face.bbox,p=.42,x=Math.max(0,bx-bw*p),y=Math.max(0,by-bh*p),w=Math.min(1-x,bw*(1+2*p)),h=Math.min(1-y,bh*(1+2*p));return `<svg class="${{mini?'mini':''}}" viewBox="${{x*face.width}} ${{y*face.height}} ${{w*face.width}} ${{h*face.height}}" preserveAspectRatio="xMidYMid slice"><image href="${{face.preview}}" width="${{face.width}}" height="${{face.height}}"/></svg>`}}
+function vectors(){{if(vectorData)return vectorData;const binary=atob(DATA.embeddings),bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);vectorData=new Float32Array(bytes.buffer);return vectorData}}
+function acceptedIds(name){{return (recovery.accepted[name]||[]).flat()}}
+function centroid(rows){{const data=vectors(),dimension=DATA.embeddingDimension,result=new Float32Array(dimension);for(const row of rows)for(let column=0;column<dimension;column++)result[column]+=data[row*dimension+column];let norm=0;for(const value of result)norm+=value*value;norm=Math.sqrt(norm);if(norm)for(let column=0;column<dimension;column++)result[column]/=norm;return result}}
+function recoveryProfiles(name){{const profiles=DATA.clusters.filter(cluster=>labels[cluster.id]?.name===name).map(cluster=>centroid(cluster.members.map(face=>face.row)));const byId=new Map(DATA.faces.map(face=>[face.face_id,face]));(recovery.accepted[name]||[]).forEach(batch=>{{const rows=batch.map(id=>byId.get(id)?.row).filter(row=>row!==undefined);if(rows.length)profiles.push(centroid(rows))}});return profiles}}
+function recoveryCandidates(name){{const profiles=recoveryProfiles(name),data=vectors(),dimension=DATA.embeddingDimension,clustered=new Set(DATA.clusters.flatMap(cluster=>cluster.members.map(face=>face.face_id))),assigned=new Set(Object.values(recovery.accepted).flat(2)),dismissed=new Set(recovery.dismissed[name]||[]),ranked=[];for(const face of DATA.faces){{if(clustered.has(face.face_id)||assigned.has(face.face_id)||dismissed.has(face.face_id))continue;let best=-1;for(const profile of profiles){{let score=0,offset=face.row*dimension;for(let column=0;column<dimension;column++)score+=profile[column]*data[offset+column];if(score>best)best=score}}ranked.push({{face,score:best}})}}ranked.sort((a,b)=>b.score-a.score);return ranked.slice(0,100)}}
+function saveRecovery(){{localStorage.setItem(RECOVERY_KEY,JSON.stringify(recovery))}}
+function checkedRecovery(){{return [...recoveryGrid.querySelectorAll('input:checked')].map(input=>input.value)}}
+function renderRecovery(){{const name=activeRecoveryName,candidates=recoveryCandidates(name),accepted=acceptedIds(name).length;recoveryTitle.textContent=`Recover more faces for ${{name}}`;recoveryStatus.textContent=`${{accepted}} recovered so far · showing the strongest unclustered candidates. Select only faces you recognize.`;recoveryGrid.innerHTML=candidates.map((candidate,index)=>`<label class="recovery-card"><input type="checkbox" value="${{candidate.face.face_id}}">${{crop(candidate.face)}}<span>#${{index+1}} · similarity ${{candidate.score.toFixed(3)}}${{candidate.face.year?' · '+candidate.face.year:''}}</span></label>`).join('')||'<p class="empty">No unclustered candidates remain.</p>';document.querySelector('#undo-recovery').disabled=!(recovery.accepted[name]?.length)}}
+function openRecovery(name){{activeRecoveryName=name;recoveryDialog.showModal();renderRecovery()}}
+document.querySelector('#close-recovery').onclick=()=>recoveryDialog.close();
+document.querySelector('#select-ten').onclick=()=>[...recoveryGrid.querySelectorAll('input')].slice(0,10).forEach(input=>input.checked=true);
+document.querySelector('#accept-recovery').onclick=()=>{{const ids=checkedRecovery();if(!ids.length)return;(recovery.accepted[activeRecoveryName]??=[]).push(ids);const dismissed=new Set(recovery.dismissed[activeRecoveryName]||[]);ids.forEach(id=>dismissed.delete(id));recovery.dismissed[activeRecoveryName]=[...dismissed];saveRecovery();renderRecovery()}};
+document.querySelector('#dismiss-recovery').onclick=()=>{{const ids=checkedRecovery();if(!ids.length)return;const dismissed=new Set(recovery.dismissed[activeRecoveryName]||[]);ids.forEach(id=>dismissed.add(id));recovery.dismissed[activeRecoveryName]=[...dismissed];saveRecovery();renderRecovery()}};
+document.querySelector('#undo-recovery').onclick=()=>{{recovery.accepted[activeRecoveryName]?.pop();saveRecovery();renderRecovery()}};
 function decided(c){{return Boolean(labels[c.id]?.name||labels[c.id]?.rejected)}}
 function filtered(){{return DATA.clusters.filter(c=>viewMode==='all'||(viewMode==='unreviewed'&&!decided(c))||(viewMode==='named'&&labels[c.id]?.name)||(viewMode==='rejected'&&labels[c.id]?.rejected))}}
 function updateProgress(){{const named=DATA.clusters.filter(c=>labels[c.id]?.name).length,rejected=DATA.clusters.filter(c=>labels[c.id]?.rejected).length;progress.textContent=`${{named}} named · ${{rejected}} rejected · ${{DATA.clusters.length-named-rejected}} remaining`}}
@@ -232,9 +261,9 @@ function save(){{localStorage.setItem(KEY,JSON.stringify(labels));updateNames();
 function renderList(){{list.innerHTML='';filtered().forEach(c=>{{const label=labels[c.id],b=document.createElement('button');b.className='cluster-button'+(current===c.id?' active':'');b.innerHTML=crop(c.members[0],true)+`<span><b>${{esc(label?.name||(label?.rejected?'Rejected':'Cluster '+c.id))}}</b><small>${{c.size}} faces · cohesion ${{c.cohesion_median.toFixed(2)}}</small></span>`;b.onclick=()=>show(c.id);list.append(b)}});if(!list.children.length)list.innerHTML='<p>No clusters in this view.</p>'}}
 function nextUnreviewed(after){{const start=DATA.clusters.findIndex(c=>c.id===after);for(let offset=1;offset<=DATA.clusters.length;offset++){{const candidate=DATA.clusters[(start+offset)%DATA.clusters.length];if(!decided(candidate))return candidate}}return null}}
 function finish(id){{save();const next=nextUnreviewed(id);if(next)show(next.id);else show(id)}}
-function show(id){{current=id;const c=DATA.clusters.find(cluster=>cluster.id===id),label=labels[id]||{{}};if(!c)return;renderList();review.innerHTML=`<div class="review-head"><div><h2>${{esc(label.name||(label.rejected?'Rejected cluster':'Unlabeled cluster'))}} <span class="badge">${{c.size}} faces</span></h2><p>Median cohesion ${{c.cohesion_median.toFixed(3)}} · weakest member ${{c.cohesion_min.toFixed(3)}} · cluster ${{c.id}}</p></div><div><button id="previous" class="secondary">← Previous</button> <button id="next" class="secondary">Next →</button></div></div><div class="label-form"><input id="person-name" list="known-names" placeholder="Person's name" value="${{esc(label.name||'')}}"><button id="save-label">Name cluster</button><button id="reject" class="danger">Reject / not useful</button>${{decided(c)?'<button id="clear" class="secondary">Clear decision</button>':''}}</div><div class="faces">${{c.members.map(f=>`<figure><a href="${{f.preview}}" target="_blank">${{crop(f)}}</a><figcaption><strong>${{esc(f.filename)}}</strong><span>${{esc(f.album)}}${{f.year?' · '+f.year:''}}</span></figcaption></figure>`).join('')}}</div>`;document.querySelector('#save-label').onclick=()=>{{const name=document.querySelector('#person-name').value.trim();if(!name)return;labels[id]={{name}};finish(id)}};document.querySelector('#reject').onclick=()=>{{labels[id]={{rejected:true}};finish(id)}};document.querySelector('#clear')?.addEventListener('click',()=>{{delete labels[id];save();show(id)}});const at=DATA.clusters.findIndex(cluster=>cluster.id===id);document.querySelector('#previous').onclick=()=>show(DATA.clusters[(at-1+DATA.clusters.length)%DATA.clusters.length].id);document.querySelector('#next').onclick=()=>show(DATA.clusters[(at+1)%DATA.clusters.length].id);document.querySelector('#person-name').focus()}}
+function show(id){{current=id;const c=DATA.clusters.find(cluster=>cluster.id===id),label=labels[id]||{{}};if(!c)return;renderList();review.innerHTML=`<div class="review-head"><div><h2>${{esc(label.name||(label.rejected?'Rejected cluster':'Unlabeled cluster'))}} <span class="badge">${{c.size}} faces</span></h2><p>Median cohesion ${{c.cohesion_median.toFixed(3)}} · weakest member ${{c.cohesion_min.toFixed(3)}} · cluster ${{c.id}}</p></div><div><button id="previous" class="secondary">← Previous</button> <button id="next" class="secondary">Next →</button></div></div><div class="label-form"><input id="person-name" list="known-names" placeholder="Person's name" value="${{esc(label.name||'')}}"><button id="save-label">Name cluster</button><button id="reject" class="danger">Reject / not useful</button>${{label.name?'<button id="recover" class="secondary">Recover more faces</button>':''}}${{decided(c)?'<button id="clear" class="secondary">Clear decision</button>':''}}</div><div class="faces">${{c.members.map(f=>`<figure><a href="${{f.preview}}" target="_blank">${{crop(f)}}</a><figcaption><strong>${{esc(f.filename)}}</strong><span>${{esc(f.album)}}${{f.year?' · '+f.year:''}}</span></figcaption></figure>`).join('')}}</div>`;document.querySelector('#save-label').onclick=()=>{{const name=document.querySelector('#person-name').value.trim();if(!name)return;labels[id]={{name}};finish(id)}};document.querySelector('#reject').onclick=()=>{{labels[id]={{rejected:true}};finish(id)}};document.querySelector('#recover')?.addEventListener('click',()=>openRecovery(label.name));document.querySelector('#clear')?.addEventListener('click',()=>{{delete labels[id];save();show(id)}});const at=DATA.clusters.findIndex(cluster=>cluster.id===id);document.querySelector('#previous').onclick=()=>show(DATA.clusters[(at-1+DATA.clusters.length)%DATA.clusters.length].id);document.querySelector('#next').onclick=()=>show(DATA.clusters[(at+1)%DATA.clusters.length].id);document.querySelector('#person-name').focus()}}
 document.querySelector('#show-unreviewed').onclick=()=>{{viewMode='unreviewed';renderList()}};document.querySelector('#show-all').onclick=()=>{{viewMode='all';renderList()}};document.querySelector('#show-named').onclick=()=>{{viewMode='named';renderList()}};document.querySelector('#show-rejected').onclick=()=>{{viewMode='rejected';renderList()}};
-document.querySelector('#export').onclick=()=>{{const clusters=DATA.clusters.filter(decided).map(cluster=>({{cluster_id:cluster.id,...labels[cluster.id],face_ids:cluster.members.map(face=>face.face_id)}})),people={{}};clusters.filter(cluster=>cluster.name).forEach(cluster=>{{people[cluster.name]??={{cluster_ids:[],face_ids:[]}};people[cluster.name].cluster_ids.push(cluster.cluster_id);people[cluster.name].face_ids.push(...cluster.face_ids)}});const blob=new Blob([JSON.stringify({{version:1,archive:DATA.archive,settings:{{threshold:DATA.threshold,neighbors:DATA.neighbors,minimum_size:DATA.minimumSize}},clusters,people}},null,2)],{{type:'application/json'}}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='people-cluster-labels.json';a.click();URL.revokeObjectURL(a.href)}};
+document.querySelector('#export').onclick=()=>{{const clusters=DATA.clusters.filter(decided).map(cluster=>({{cluster_id:cluster.id,...labels[cluster.id],face_ids:cluster.members.map(face=>face.face_id)}})),people={{}};clusters.filter(cluster=>cluster.name).forEach(cluster=>{{people[cluster.name]??={{cluster_ids:[],face_ids:[]}};people[cluster.name].cluster_ids.push(cluster.cluster_id);people[cluster.name].face_ids.push(...cluster.face_ids)}});Object.entries(recovery.accepted).forEach(([name,batches])=>{{people[name]??={{cluster_ids:[],face_ids:[]}};people[name].face_ids.push(...batches.flat())}});Object.values(people).forEach(person=>person.face_ids=[...new Set(person.face_ids)]);const blob=new Blob([JSON.stringify({{version:2,archive:DATA.archive,settings:{{threshold:DATA.threshold,neighbors:DATA.neighbors,minimum_size:DATA.minimumSize}},clusters,recovery,people}},null,2)],{{type:'application/json'}}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='people-cluster-labels.json';a.click();URL.revokeObjectURL(a.href)}};
 updateNames();updateProgress();renderList();if(DATA.clusters.length)show(DATA.clusters[0].id);</script></body></html>"""
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(document, encoding="utf-8")

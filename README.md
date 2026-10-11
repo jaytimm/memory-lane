@@ -33,4 +33,10 @@ labeling. Reusing the same name across clusters creates one person with several
 internal representations. Progress is saved in browser storage and can be
 exported as JSON. It does not modify photographs.
 
+After a cluster is named, **Recover more faces** ranks every face that did not
+enter a conservative cluster against that person's labeled clusters and accepted
+recovery batches. Correct faces can be added in batches, false matches can be
+hidden, and the most recent accepted batch can be undone. Recovery decisions are
+saved alongside the cluster labels and included in the JSON export.
+
 The Windows companion is built by the workflow in `.github/workflows`.
