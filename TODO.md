@@ -1,14 +1,19 @@
 # Memory Lane: next decisions
 
+The face-clustering and named-person experiment has been retired. The existing
+**Find similar faces** search remains a simple, unnamed visual-similarity tool.
+
 ## Viewer
 
 - Remove the **Open original** link. Keep the note that right-click copy/save is
   normal browser behavior.
+- Rename **Find this person** to **Find similar faces** so the button describes
+  what the app actually does without promising identity recognition.
 
 ## Search results and similarity
 
 - Revisit the fixed top-100 result limit used by text search, **Find similar
-  photos**, and **Find this person**.
+  photos**, and **Find similar faces**.
 - Compare three approaches with real searches:
   1. keep a fixed number of results;
   2. show only results above a similarity-score threshold;
@@ -19,44 +24,16 @@
 - Add a short guide explanation of what “similar” means for:
   - a text search: the photograph visually matches the words;
   - **Find similar photos**: the whole photograph looks related;
-  - **Find this person**: the selected face looks related.
+  - **Find similar faces**: the selected face looks visually related.
+
+## Browse controls
+
+- Decide whether the decade buttons are already clearer than a range slider for
+  a slow or infrequent computer user. Only replace them if the slider is plainly
+  easier in a real walkthrough.
 
 ## Discussion before implementation
 
 - Inspect the score ranges from several strong, weak, and intentionally odd
   queries before choosing a threshold or percentage display. Text, whole-photo,
   and face similarities may need different cutoffs and labels.
-
-## People and face clusters
-
-- Treat this as local face recognition built from the archive itself: the app
-  forms face clusters, and the user labels each useful cluster once rather than
-  labeling photographs or faces one by one.
-- Explore grouping the existing face embeddings into strong, conservative
-  clusters that probably represent the same person.
-- Let the user review a cluster before naming it. Do not automatically attach a
-  name to uncertain faces.
-- Allow a named person to have two or three representative profiles rather than
-  one fixed reference face—for example childhood, adulthood, and a useful side
-  or three-quarter view.
-- Use those approved representatives together when finding that person. This
-  should improve matches across age, pose, lighting, glasses, facial hair, and
-  other appearance changes.
-- Allow several separately labeled clusters to share one person's name—for
-  example, childhood, adulthood, and side-profile clusters. Keep the cluster
-  boundaries so a mistaken group can be corrected without relabeling everything.
-- Derive person tags for photographs from their labeled face clusters. Labeling
-  one cluster should make every photograph represented in that cluster
-  searchable by that person's name without editing photographs individually.
-- Combine people with the existing search dimensions—for example **Mary in the
-  1980s**, **Mary playing guitar**, or photographs containing **Mary and John**.
-  Treat person selection as a reliable metadata filter and semantic text as the
-  ranked visual search within that filtered set.
-- Store these labels in the local archive index first rather than writing names
-  into the original image files. Only reviewed clusters should create person
-  tags; uncertain and unlabeled clusters should remain anonymous.
-- Keep weak or ambiguous faces outside the named cluster until the user confirms
-  them. Provide simple actions such as **This is the same person**, **Not this
-  person**, and **Name this group**.
-- Decide whether named people should become an optional browsing tool while
-  keeping the main gallery uncluttered.
