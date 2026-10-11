@@ -8,6 +8,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from PIL import Image
 
+from src.audit_identity import label_profiles, score_identity
 from src.build import build_archive
 from src.cluster_faces import conservative_clusters, nearest_faces
 from src.embed import _existing_vectors, _save_partial
@@ -131,6 +132,25 @@ class BuildIntegrationTests(unittest.TestCase):
 
 
 class SemanticRankingTests(unittest.TestCase):
+    def test_identity_profiles_score_target_and_competing_people(self):
+        import numpy as np
+
+        embeddings = np.asarray([[1, 0], [.9, .1], [0, 1]], dtype=np.float32)
+        embeddings /= np.linalg.norm(embeddings, axis=1, keepdims=True)
+        labels = {
+            "clusters": [
+                {"name": "Anthony", "face_ids": ["a"]},
+                {"name": "Jeff", "face_ids": ["j"]},
+            ],
+            "recovery": {"accepted": {"Anthony": [["b"]]}},
+        }
+        profiles, decided = label_profiles(labels, embeddings, {"a": 0, "b": 1, "j": 2})
+        scores, margins, competitors = score_identity(embeddings, profiles, "Anthony")
+        self.assertEqual(decided, {"a", "b", "j"})
+        self.assertGreater(scores[0], .99)
+        self.assertGreater(margins[0], .9)
+        self.assertEqual(competitors[0], "Jeff")
+
     def test_conservative_face_clusters_require_reciprocal_neighbors(self):
         import numpy as np
 

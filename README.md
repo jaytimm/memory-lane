@@ -39,4 +39,15 @@ recovery batches. Correct faces can be added in batches, false matches can be
 hidden, and the most recent accepted batch can be undone. Recovery decisions are
 saved alongside the cluster labels and included in the JSON export.
 
+Build a read-only audit of automatic assignments for one named person:
+
+```bash
+python3 -m src.audit_identity --archive ./PhotoArchive \
+  --labels ./people-cluster-labels.json --person Anthony
+```
+
+The audit separates strong automatic candidates from a lower-confidence review
+zone and compares each face with every other named person before proposing an
+assignment.
+
 The Windows companion is built by the workflow in `.github/workflows`.
