@@ -195,7 +195,7 @@
     const album = albums.get(activeAlbumId);
     const within = album ? ` within ${album.title}` : (activeDecade ? ` within the ${activeDecade}s` : "");
     if (searchMode === "text") return `Searching for “${searchQuery}”${within}`;
-    if (searchMode === "face") return "Showing photographs with similar faces";
+    if (searchMode === "face") return "Showing photographs of this person";
     if (searchMode === "similar") return "Showing photographs similar to the selected photograph";
     if (album) return `Showing photographs from ${album.title}`;
     if (activeDecade) return `Showing photographs from the ${activeDecade}s`;
@@ -210,7 +210,7 @@
       elements.description.textContent = searchDescription;
     } else if (searchMode === "face") {
       elements.albumLabel.textContent = "Search results";
-      elements.photosHeading.textContent = "Similar faces";
+      elements.photosHeading.textContent = "Photographs of this person";
       elements.description.textContent = searchDescription;
     } else if (searchMode === "similar") {
       elements.albumLabel.textContent = "Search results";
@@ -264,7 +264,7 @@
       image.alt = photo.filename;
       image.loading = "lazy";
       image.decoding = "async";
-      if (photo.width && photo.height) button.style.aspectRatio = `${photo.width} / ${photo.height}`;
+      if (photo.width && photo.height && photo.height > photo.width) button.classList.add("portrait");
       button.append(image);
       button.addEventListener("click", () => openViewer(index));
       elements.grid.append(button);
@@ -376,7 +376,7 @@
     elements.findSimilar.disabled = true;
     elements.findFaces.disabled = true;
     elements.faceLayer.replaceChildren();
-    elements.viewerStatus.textContent = "Finding similar faces…";
+    elements.viewerStatus.textContent = "Finding this person…";
     try {
       const response = await fetch("/api/face-search", {
         method: "POST",

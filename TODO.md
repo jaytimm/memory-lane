@@ -1,12 +1,12 @@
 # Memory Lane: next decisions
 
 The face-clustering and named-person experiment has been retired. The existing
-**Find similar faces** search remains a simple, unnamed visual-similarity tool.
+**Find this person** action remains a simple selected-face similarity search.
 
 ## Search results and similarity
 
 - Revisit the fixed top-100 result limit used by text search, **Find similar
-  photos**, and **Find similar faces**.
+  photos**, and **Find this person**.
 - Compare three approaches with real searches:
   1. keep a fixed number of results;
   2. show only results above a similarity-score threshold;
@@ -17,7 +17,7 @@ The face-clustering and named-person experiment has been retired. The existing
 - Add a short guide explanation of what “similar” means for:
   - a text search: the photograph visually matches the words;
   - **Find similar photos**: the whole photograph looks related;
-  - **Find similar faces**: the selected face looks visually related.
+  - **Find this person**: the selected face looks visually related.
 
 ## Browse controls
 

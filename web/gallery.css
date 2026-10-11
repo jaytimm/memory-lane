@@ -248,7 +248,13 @@ input, select, .quiet-button, .load-more {
 .album-card-note { display: -webkit-box; margin-top: 9px; overflow: hidden; color: var(--muted); font-size: .86rem; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 
 .photo-results { margin-top: 30px; padding: 0; border-radius: 16px; transition: background .2s ease, padding .2s ease; }
-.photo-results.search-results { margin-inline: -20px; padding: 0 20px 28px; background: #f8e6dc; }
+.photo-results.search-results {
+  margin-inline: -22px;
+  border: 2px solid #d99a7f;
+  padding: 18px 20px 28px;
+  background: #f2d2c3;
+  box-shadow: 0 10px 30px rgb(116 61 39 / 12%);
+}
 .result-state {
   display: flex;
   align-items: center;
@@ -301,6 +307,8 @@ input, select, .quiet-button, .load-more {
   object-fit: cover;
   transition: transform .25s ease;
 }
+
+.photo-card.portrait img { object-fit: contain; }
 
 .photo-card:hover img { transform: scale(1.035); }
 .empty-state { padding: 50px; text-align: center; color: var(--muted); }
