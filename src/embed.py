@@ -15,6 +15,7 @@ from PIL import Image, ImageOps
 from .archive_data import read_gallery_manifest
 from .browser_index import write_browser_index
 from .clip_model import load_clip, model_identity, preserve_portable_weights
+from .text_model import write_text_model
 
 
 def _read_vector_files(
@@ -107,7 +108,7 @@ def build_embeddings(archive: Path, batch_size: int = 8) -> dict:
 
     print("Loading OpenCLIP model...", flush=True)
     cache_dir = archive / ".model-cache"
-    model, preprocess, _, preprocess_config = load_clip(cache_dir)
+    model, preprocess, tokenizer, preprocess_config = load_clip(cache_dir)
     preserve_portable_weights(cache_dir)
     identity = model_identity()
     existing = _existing_vectors(search_dir, identity)
@@ -177,6 +178,7 @@ def build_embeddings(archive: Path, batch_size: int = 8) -> dict:
         search_dir / ".partial-embeddings.npy",
     ):
         partial_path.unlink(missing_ok=True)
+    write_text_model(archive, model, tokenizer, identity)
     write_browser_index(archive)
     print(
         f"Indexed {len(items)} photos ({reused} reused, {total_new} newly embedded) "

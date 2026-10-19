@@ -229,6 +229,7 @@ def build_archive(
     copy2(WEB_DIR / "gallery.css", assets_dir / "gallery.css")
     copy2(WEB_DIR / "gallery.js", assets_dir / "gallery.js")
     copy2(WEB_DIR / "browser-search.js", assets_dir / "browser-search.js")
+    copy2(WEB_DIR / "text-encoder.js", assets_dir / "text-encoder.js")
     copy2(WEB_DIR / "search-examples.js", assets_dir / "search-examples.js")
     (output_dir / "README.txt").write_text(
         "Family Photo Archive\n\n"

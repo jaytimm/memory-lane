@@ -19,6 +19,7 @@ from src.search import (
     _candidate_indices,
     rank_embeddings,
 )
+from src.text_model import export_text_model, quantize_groups, read_text_model_identity
 from src.serve import (
     original_photo_paths,
     parse_face_search_request,
@@ -284,6 +285,59 @@ class SemanticRankingTests(unittest.TestCase):
         self.assertEqual(face_data["photo_ids"], ["one"])
         self.assertEqual(face_data["bboxes"], [[0, 0, .2, .2]])
         self.assertTrue(np.array_equal(decode(face_data), [[0.0, 1.0]]))
+
+    def test_text_model_export_and_identity_gate(self):
+        import numpy as np
+
+        matrix = np.random.default_rng(0).normal(size=(3, 128)).astype(np.float32)
+        quantized, scales = quantize_groups(matrix)
+        self.assertEqual(quantized.dtype, np.int8)
+        self.assertEqual(scales.shape, (3, 2))
+        restored = quantized.reshape(3, 2, 64) * scales[:, :, None]
+        self.assertLess(np.abs(restored.reshape(3, 128) - matrix).max(), scales.max())
+
+        class Tokenizer:
+            encoder = {"a": 0, "b": 1, "ab": 2, "<start_of_text>": 3, "<end_of_text>": 4}
+            bpe_ranks = {("a", "b"): 0}
+            context_length = 77
+            sot_token_id = 3
+            eot_token_id = 4
+
+        state = {
+            "token_embedding.weight": np.ones((5, 64), dtype=np.float32),
+            "positional_embedding": np.zeros((77, 64), dtype=np.float32),
+            "transformer.resblocks.0.attn.in_proj_weight": np.ones((192, 64), dtype=np.float32),
+            "ln_final.weight": np.ones(64, dtype=np.float32),
+            "logit_scale": np.float32(1),
+        }
+        identity = {"architecture": "test"}
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = Path(temporary)
+            search = archive / "search"
+            search.mkdir()
+            (archive / "assets").mkdir()
+            (search / "index.json").write_text(
+                json.dumps({"model": identity, "items": [{"id": "one"}]})
+            )
+            np.save(search / "embeddings.npy", np.ones((1, 64), dtype=np.float32))
+            path = archive / "assets" / "search-text-model.js"
+            export_text_model(path, state, Tokenizer(), identity, "a photo of {}")
+
+            self.assertEqual(read_text_model_identity(path), identity)
+            source = path.read_text(encoding="utf-8").splitlines()[1]
+            prefix = "window.MEMORY_LANE_TEXT_MODEL = "
+            payload = json.loads(source[len(prefix) : -1])
+            self.assertEqual(payload["vocab"], ["a", "b", "ab", "<start_of_text>", "<end_of_text>"])
+            self.assertEqual(payload["merges"], ["a b"])
+            self.assertEqual((payload["layers"], payload["width"], payload["heads"]), (1, 64, 1))
+            self.assertIn("int8", payload["tensors"]["token_embedding.weight"])
+            self.assertIn("float32", payload["tensors"]["positional_embedding"])
+            self.assertNotIn("logit_scale", payload["tensors"])
+            self.assertEqual(write_browser_index(archive)["text"], {"file": "search-text-model.js"})
+
+            # A text model from a different model must not search this index.
+            export_text_model(path, state, Tokenizer(), {"architecture": "other"}, "{}")
+            self.assertIsNone(write_browser_index(archive)["text"])
 
     def test_face_request_validation(self):
         self.assertEqual(parse_photo_faces_request({"photo_id": "abc"}), "abc")
