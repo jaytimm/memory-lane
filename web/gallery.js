@@ -60,6 +60,7 @@
   let searchSource = "server";
   let similarIndex = null;
   let faceIndex = null;
+  let textEncoder = null;
   let originalImageUrl = (photo) => `/api/original/${encodeURIComponent(photo.id)}`;
   let originalPageUrl = (photo) => {
     const page = new URL("original-view.html", window.location.href);
@@ -371,6 +372,44 @@
     return faceIndex;
   }
 
+  function getTextEncoder() {
+    textEncoder ||= loadBrowserIndex(
+      window.MEMORY_LANE_SEARCH_DATA.text,
+      "MEMORY_LANE_TEXT_MODEL",
+      window.MemoryLaneTextEncoder.createTextEncoder,
+    ).catch((error) => { textEncoder = null; throw error; });
+    return textEncoder;
+  }
+
+  // Mirrors _candidate_indices in src/search.py.
+  function matchesSearchFilters(photo, album, dateFrom, dateTo) {
+    if (!photo) return false;
+    if (album && !(photo.album_id || "").toLowerCase().includes(album.toLowerCase())) return false;
+    const start = photo.date_start;
+    const end = photo.date_end || start;
+    if (dateFrom !== null && (end == null || end < dateFrom)) return false;
+    if (dateTo !== null && (start == null || start > dateTo)) return false;
+    return true;
+  }
+
+  async function requestTextSearch(query, album, dateFrom, dateTo) {
+    if (searchSource === "browser") {
+      const [encoder, index] = await Promise.all([getTextEncoder(), getSimilarIndex()]);
+      // Let the "Searching" message paint before the encoder holds the page.
+      await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+      const vector = encoder.encode(query);
+      return index.search(vector, 100, (id) => matchesSearchFilters(photosById.get(id), album, dateFrom, dateTo));
+    }
+    const payload = await postJson("/api/search", {
+      query,
+      top_k: 100,
+      album,
+      date_from: dateFrom,
+      date_to: dateTo,
+    }, "Search failed");
+    return payload.results;
+  }
+
   async function requestSimilar(photoId) {
     if (searchSource === "browser") return (await getSimilarIndex()).similar(photoId, 100);
     const payload = await postJson("/api/similar", { photo_id: photoId, top_k: 100 }, "Similar-photo search failed");
@@ -425,8 +464,29 @@
       imageSearchAvailable = Boolean(searchData.similar);
       faceSearchAvailable = Boolean(searchData.faces);
       if (searchData.faces) showFaceCount(searchData.faces.count);
+      if (searchData.text && searchData.similar && window.MemoryLaneTextEncoder) {
+        enableBrowserTextSearch(searchData.similar.count);
+      }
     }
     enableBrowserOriginals();
+  }
+
+  // The text model is large, so start loading it as soon as the page is up
+  // rather than making the first search wait for it.
+  function enableBrowserTextSearch(photoCount) {
+    const preparing = "Preparing search… this takes a few seconds.";
+    elements.semanticForm.hidden = false;
+    elements.semanticStatus.textContent = preparing;
+    setTimeout(() => {
+      Promise.all([getTextEncoder(), getSimilarIndex()]).then(() => {
+        if (elements.semanticStatus.textContent === preparing) {
+          elements.semanticStatus.textContent = `Ready to search ${photoCount.toLocaleString()} photographs.`;
+        }
+      }, () => {
+        elements.semanticStatus.textContent = "Typed search could not be prepared on this computer.";
+        elements.semanticStatus.classList.add("error");
+      });
+    }, 300);
   }
 
   async function enableServerSearch() {
@@ -450,7 +510,6 @@
   }
 
   async function enableSemanticSearch() {
-    // Typed search needs the model, so it stays hidden without the server.
     if (!(await enableServerSearch())) enableBrowserSearch();
   }
 
@@ -462,15 +521,14 @@
     elements.semanticStatus.classList.remove("error");
     elements.semanticStatus.textContent = "Searching photographs…";
     try {
-      const payload = await postJson("/api/search", {
+      const results = await requestTextSearch(
         query,
-        top_k: 100,
-        album: activeAlbumId || null,
-        date_from: activeDecade,
-        date_to: activeDecade ? activeDecade + 9 : null,
-      }, "Search failed");
-      showSearchResults(payload.results, "text", query, "Ranked by visual similarity.");
-      elements.semanticStatus.textContent = `${plural(payload.results.length, "result")} ranked by visual similarity.`;
+        activeAlbumId || null,
+        activeDecade,
+        activeDecade ? activeDecade + 9 : null,
+      );
+      showSearchResults(results, "text", query, "Ranked by visual similarity.");
+      elements.semanticStatus.textContent = `${plural(results.length, "result")} ranked by visual similarity.`;
     } catch (error) {
       elements.semanticStatus.textContent = error.message || "Search failed";
       elements.semanticStatus.classList.add("error");

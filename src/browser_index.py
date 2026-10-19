@@ -1,8 +1,10 @@
 """Export search vectors as scripts the gallery can load without a server.
 
 Browsers block fetch() for pages opened from file://, but still run <script>
-files. Writing the precomputed vectors as scripts lets "Find similar photos"
-and "Find this person" work from a USB on any computer, including a Chromebook.
+files. Writing the precomputed vectors as scripts lets typed search, "Find
+similar photos", and "Find this person" work from a USB on any computer,
+including a Chromebook. Typed search also needs the exported text model from
+src/text_model.py.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import sys
 import numpy as np
 
 from .archive_data import read_face_index, read_search_index
+from .text_model import TEXT_MODEL_FILE, read_text_model_identity
 
 
 SEARCH_DATA_FILE = "search-data.js"
@@ -47,10 +50,15 @@ def write_browser_index(archive: str | Path) -> dict:
     assets = archive / "assets"
     assets.mkdir(parents=True, exist_ok=True)
     search_dir = archive / "search"
-    config: dict = {"version": 1, "similar": None, "faces": None}
+    config: dict = {"version": 1, "similar": None, "faces": None, "text": None}
 
     if (search_dir / "index.json").exists():
         metadata, embeddings = read_search_index(archive)
+        # Typed search compares text vectors with these photo vectors, so the
+        # exported text model must come from the same model as the index.
+        text_identity = read_text_model_identity(assets / TEXT_MODEL_FILE)
+        if embeddings.size and text_identity == metadata.get("model"):
+            config["text"] = {"file": TEXT_MODEL_FILE}
         if embeddings.size:
             _write_script(
                 assets / SIMILAR_FILE,

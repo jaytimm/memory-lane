@@ -1,6 +1,6 @@
-// Similar-photo and face search over precomputed vectors, for use without the
-// local server. Ranking mirrors SemanticSearchEngine.similar and
-// FaceSearchIndex.search in src/search.py.
+// Typed, similar-photo, and face search over precomputed vectors, for use
+// without the local server. Ranking mirrors SemanticSearchEngine and
+// FaceSearchIndex in src/search.py.
 (() => {
   "use strict";
 
@@ -13,19 +13,22 @@
     return new Float32Array(bytes.buffer);
   }
 
-  function scoreAll(vectors, dimension, row) {
+  function scoreAll(vectors, dimension, query) {
     const count = vectors.length / dimension;
     const scores = new Float32Array(count);
-    const offset = row * dimension;
     for (let candidate = 0; candidate < count; candidate += 1) {
       const start = candidate * dimension;
       let total = 0;
       for (let position = 0; position < dimension; position += 1) {
-        total += vectors[start + position] * vectors[offset + position];
+        total += vectors[start + position] * query[position];
       }
       scores[candidate] = total;
     }
     return scores;
+  }
+
+  function rowVector(vectors, dimension, row) {
+    return vectors.subarray(row * dimension, (row + 1) * dimension);
   }
 
   function rankedRows(scores) {
@@ -41,9 +44,17 @@
       similar(photoId, topK) {
         const row = rows.get(photoId);
         if (row === undefined) throw new Error("Photo not found");
-        const scores = scoreAll(vectors, payload.dimension, row);
+        const scores = scoreAll(vectors, payload.dimension, rowVector(vectors, payload.dimension, row));
         return rankedRows(scores)
           .filter((candidate) => candidate !== row)
+          .slice(0, topK)
+          .map((candidate) => ({ id: payload.ids[candidate], score: scores[candidate] }));
+      },
+      // Rank photos against a text vector; include(id) applies the filters.
+      search(queryVector, topK, include) {
+        const scores = scoreAll(vectors, payload.dimension, queryVector);
+        return rankedRows(scores)
+          .filter((candidate) => include(payload.ids[candidate]))
           .slice(0, topK)
           .map((candidate) => ({ id: payload.ids[candidate], score: scores[candidate] }));
       },
@@ -66,7 +77,7 @@
       search(faceId, topK, knownPhotoIds) {
         const row = rows.get(faceId);
         if (row === undefined) throw new Error("Face not found");
-        const scores = scoreAll(vectors, payload.dimension, row);
+        const scores = scoreAll(vectors, payload.dimension, rowVector(vectors, payload.dimension, row));
         const seenPhotos = new Set([payload.photo_ids[row]]);
         const results = [];
         for (const candidate of rankedRows(scores)) {

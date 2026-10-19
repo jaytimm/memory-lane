@@ -15,12 +15,14 @@ python3 -m src.build --input "/path/to/images" --output ./PhotoArchive
 ```
 
 Opening the gallery's `index.html` directly, without the launcher, still
-supports browsing, **Find similar photos**, **Find this person**, and original
-photographs. Typed search needs the launcher. The embedding, face, and prune
-steps keep the browser search data current; to regenerate it by hand:
+supports browsing, typed search, **Find similar photos**, **Find this person**,
+and original photographs, so the USB also works on a Chromebook or Mac. Typed
+search runs an int8 copy of the CLIP text model in the browser. The embedding,
+face, and prune steps keep the browser search data current; to regenerate it by
+hand:
 
 ```bash
-python3 -m src.browser_index --archive ./PhotoArchive
+python3 -m src.text_model --archive ./PhotoArchive
 ```
 
 Run the tests:
