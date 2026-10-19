@@ -8,6 +8,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from PIL import Image
 
+from src.browser_index import write_browser_index
 from src.build import build_archive
 from src.embed import _existing_vectors, _save_partial
 from src.ingest import album_year_range, stable_image_id
@@ -231,6 +232,58 @@ class SemanticRankingTests(unittest.TestCase):
             results = index.search("p1:0", top_k=10)
         self.assertEqual([result["id"] for result in results], ["p2", "p3"])
         self.assertEqual(len(index.faces_for_photo("p2")), 2)
+
+    def test_browser_index_round_trips_vectors(self):
+        import base64
+        import numpy as np
+
+        def read_script(path: Path, variable: str) -> dict:
+            source = path.read_text(encoding="utf-8").strip()
+            prefix = f"window.{variable} = "
+            self.assertTrue(source.startswith(prefix) and source.endswith(";"))
+            return json.loads(source[len(prefix) : -1])
+
+        def decode(payload: dict) -> np.ndarray:
+            data = np.frombuffer(base64.b64decode(payload["vectors"]), dtype="<f4")
+            return data.reshape(-1, payload["dimension"])
+
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = Path(temporary)
+            search = archive / "search"
+            search.mkdir()
+            embeddings = np.asarray([[1.0, 0.0, 0.0], [0.6, 0.8, 0.0]], dtype=np.float32)
+            (search / "index.json").write_text(
+                json.dumps({"items": [{"id": "one"}, {"id": "two"}]})
+            )
+            np.save(search / "embeddings.npy", embeddings)
+
+            config = write_browser_index(archive)
+            self.assertEqual(config["similar"], {"file": "search-similar.js", "count": 2})
+            self.assertIsNone(config["faces"])
+            self.assertFalse((archive / "assets" / "search-faces.js").exists())
+            similar = read_script(
+                archive / "assets" / "search-similar.js", "MEMORY_LANE_SIMILAR_VECTORS"
+            )
+            self.assertEqual(similar["ids"], ["one", "two"])
+            self.assertTrue(np.array_equal(decode(similar), embeddings))
+
+            faces = [
+                {"id": "one:0", "photo_id": "one", "bbox": [0, 0, .2, .2], "detection_score": .9},
+            ]
+            (search / "faces.json").write_text(json.dumps({"items": faces}))
+            np.save(search / "faces.npy", np.asarray([[0.0, 1.0]], dtype=np.float32))
+            config = write_browser_index(archive)
+            face_data = read_script(
+                archive / "assets" / "search-faces.js", "MEMORY_LANE_FACE_VECTORS"
+            )
+            pointer = read_script(
+                archive / "assets" / "search-data.js", "MEMORY_LANE_SEARCH_DATA"
+            )
+        self.assertEqual(pointer, config)
+        self.assertEqual(config["faces"]["count"], 1)
+        self.assertEqual(face_data["photo_ids"], ["one"])
+        self.assertEqual(face_data["bboxes"], [[0, 0, .2, .2]])
+        self.assertTrue(np.array_equal(decode(face_data), [[0.0, 1.0]]))
 
     def test_face_request_validation(self):
         self.assertEqual(parse_photo_faces_request({"photo_id": "abc"}), "abc")

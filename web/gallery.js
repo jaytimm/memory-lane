@@ -55,6 +55,19 @@
   let imageSearchAvailable = false;
   let faceSearchAvailable = false;
   let originalsAvailable = false;
+  // "server" uses the local search service; "browser" uses precomputed
+  // vectors when the gallery is opened directly from the USB.
+  let searchSource = "server";
+  let similarIndex = null;
+  let faceIndex = null;
+  let originalImageUrl = (photo) => `/api/original/${encodeURIComponent(photo.id)}`;
+  let originalPageUrl = (photo) => {
+    const page = new URL("original-view.html", window.location.href);
+    page.searchParams.set("id", photo.id);
+    page.searchParams.set("name", photo.filename);
+    page.searchParams.set("view", "2");
+    return page.href;
+  };
 
   function plural(number, word) {
     return `${number.toLocaleString()} ${word}${number === 1 ? "" : "s"}`;
@@ -277,20 +290,15 @@
     viewerIndex = index;
     const photo = filteredPhotos[index];
     const album = albums.get(photo.album_id);
-    const original = `/api/original/${encodeURIComponent(photo.id)}`;
     elements.viewerImage.onerror = () => {
       elements.viewerImage.onerror = null;
       elements.viewerImage.src = photo.preview;
     };
-    elements.viewerImage.src = originalsAvailable ? original : photo.preview;
+    elements.viewerImage.src = originalsAvailable ? originalImageUrl(photo) : photo.preview;
     elements.viewerImage.alt = photo.filename;
     elements.viewerTitle.textContent = photo.filename;
     elements.viewerAlbum.textContent = album.title;
-    const originalViewer = new URL("original-view.html", window.location.href);
-    originalViewer.searchParams.set("id", photo.id);
-    originalViewer.searchParams.set("name", photo.filename);
-    originalViewer.searchParams.set("view", "2");
-    elements.openOriginal.href = originalViewer.href;
+    if (originalsAvailable) elements.openOriginal.href = originalPageUrl(photo);
     elements.openOriginal.hidden = !originalsAvailable;
     elements.faceLayer.replaceChildren();
     elements.viewerStatus.textContent = "";
@@ -311,23 +319,139 @@
     elements.photosHeading.scrollIntoView({ behavior: "smooth" });
   }
 
-  async function enableSemanticSearch() {
+  function showFaceCount(faceCount) {
+    elements.summary.textContent = `${plural(data.photos.length, "photograph")} · ${plural(data.albums.length, "album")} · ${plural(faceCount, "face")}`;
+  }
+
+  async function postJson(path, body, failure) {
+    const response = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || failure);
+    return payload;
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error("Search data could not be loaded"));
+      document.head.append(script);
+    });
+  }
+
+  // Large vector files load on first use, then stay in memory.
+  function loadBrowserIndex(entry, variable, create) {
+    return loadScript(`assets/${entry.file}`).then(() => {
+      const index = create(window[variable]);
+      delete window[variable];
+      return index;
+    });
+  }
+
+  function getSimilarIndex() {
+    similarIndex ||= loadBrowserIndex(
+      window.MEMORY_LANE_SEARCH_DATA.similar,
+      "MEMORY_LANE_SIMILAR_VECTORS",
+      window.MemoryLaneBrowserSearch.createSimilarIndex,
+    ).catch((error) => { similarIndex = null; throw error; });
+    return similarIndex;
+  }
+
+  function getFaceIndex() {
+    faceIndex ||= loadBrowserIndex(
+      window.MEMORY_LANE_SEARCH_DATA.faces,
+      "MEMORY_LANE_FACE_VECTORS",
+      window.MemoryLaneBrowserSearch.createFaceIndex,
+    ).catch((error) => { faceIndex = null; throw error; });
+    return faceIndex;
+  }
+
+  async function requestSimilar(photoId) {
+    if (searchSource === "browser") return (await getSimilarIndex()).similar(photoId, 100);
+    const payload = await postJson("/api/similar", { photo_id: photoId, top_k: 100 }, "Similar-photo search failed");
+    return payload.results;
+  }
+
+  async function requestFaces(photoId) {
+    if (searchSource === "browser") return (await getFaceIndex()).facesForPhoto(photoId);
+    const payload = await postJson("/api/faces", { photo_id: photoId }, "Could not load faces");
+    return payload.faces;
+  }
+
+  async function requestFaceSearch(faceId) {
+    if (searchSource === "browser") {
+      return (await getFaceIndex()).search(faceId, 100, photosById);
+    }
+    const payload = await postJson("/api/face-search", { face_id: faceId, top_k: 100 }, "Face search failed");
+    return payload.results;
+  }
+
+  function imageLoads(src) {
+    return new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve(true);
+      image.onerror = () => resolve(false);
+      image.src = src;
+    });
+  }
+
+  async function enableBrowserOriginals() {
+    if (!data.photos.length) return;
+    // On the USB, the gallery sits in "Memory Lane/Gallery" beside
+    // "Family Photos". A locally built archive may hold its own photos/ copy.
+    const locations = [
+      (photo) => `../../Family%20Photos/${photo.original.replace(/^photos\//, "")}`,
+      (photo) => photo.original,
+    ];
+    for (const location of locations) {
+      if (await imageLoads(location(data.photos[0]))) {
+        originalImageUrl = location;
+        originalPageUrl = location;
+        originalsAvailable = true;
+        return;
+      }
+    }
+  }
+
+  function enableBrowserSearch() {
+    searchSource = "browser";
+    const searchData = window.MEMORY_LANE_SEARCH_DATA;
+    if (window.MemoryLaneBrowserSearch && searchData) {
+      imageSearchAvailable = Boolean(searchData.similar);
+      faceSearchAvailable = Boolean(searchData.faces);
+      if (searchData.faces) showFaceCount(searchData.faces.count);
+    }
+    enableBrowserOriginals();
+  }
+
+  async function enableServerSearch() {
+    // Pages opened from file:// cannot reach the search service.
+    if (window.location.protocol === "file:") return false;
     try {
       const response = await fetch("/api/status", { cache: "no-store" });
-      if (!response.ok) return;
+      if (!response.ok) return false;
       const status = await response.json();
-      if (!status.available) return;
+      if (!status.available) return false;
       imageSearchAvailable = true;
       faceSearchAvailable = Boolean(status.face_search);
       originalsAvailable = Boolean(status.originals_available);
       elements.semanticForm.hidden = false;
-      if (status.face_search) {
-        elements.summary.textContent = `${plural(data.photos.length, "photograph")} · ${plural(data.albums.length, "album")} · ${plural(status.face_count, "face")}`;
-      }
+      if (status.face_search) showFaceCount(status.face_count);
       elements.semanticStatus.textContent = `Ready to search ${status.photo_count.toLocaleString()} photographs.`;
+      return true;
     } catch (_) {
-      // Direct file:// browsing intentionally keeps model-backed controls hidden.
+      return false;
     }
+  }
+
+  async function enableSemanticSearch() {
+    // Typed search needs the model, so it stays hidden without the server.
+    if (!(await enableServerSearch())) enableBrowserSearch();
   }
 
   elements.semanticForm.addEventListener("submit", async (event) => {
@@ -338,19 +462,13 @@
     elements.semanticStatus.classList.remove("error");
     elements.semanticStatus.textContent = "Searching photographs…";
     try {
-      const response = await fetch("/api/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query,
-          top_k: 100,
-          album: activeAlbumId || null,
-          date_from: activeDecade,
-          date_to: activeDecade ? activeDecade + 9 : null,
-        }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Search failed");
+      const payload = await postJson("/api/search", {
+        query,
+        top_k: 100,
+        album: activeAlbumId || null,
+        date_from: activeDecade,
+        date_to: activeDecade ? activeDecade + 9 : null,
+      }, "Search failed");
       showSearchResults(payload.results, "text", query, "Ranked by visual similarity.");
       elements.semanticStatus.textContent = `${plural(payload.results.length, "result")} ranked by visual similarity.`;
     } catch (error) {
@@ -368,17 +486,11 @@
     elements.findFaces.disabled = true;
     elements.viewerStatus.textContent = "Finding similar photographs…";
     try {
-      const response = await fetch("/api/similar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photo_id: photo.id, top_k: 100 }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Similar-photo search failed");
+      const results = await requestSimilar(photo.id);
       activeAlbumId = "";
       activeDecade = null;
       elements.viewer.close();
-      showSearchResults(payload.results, "similar", "", "Ranked by whole-photograph similarity.");
+      showSearchResults(results, "similar", "", "Ranked by whole-photograph similarity.");
     } catch (error) {
       elements.viewerStatus.textContent = error.message || "Similar-photo search failed";
       elements.findSimilar.disabled = false;
@@ -392,17 +504,11 @@
     elements.faceLayer.replaceChildren();
     elements.viewerStatus.textContent = "Finding this person…";
     try {
-      const response = await fetch("/api/face-search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ face_id: faceId, top_k: 100 }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Face search failed");
+      const results = await requestFaceSearch(faceId);
       activeAlbumId = "";
       activeDecade = null;
       elements.viewer.close();
-      showSearchResults(payload.results, "face", "", "Ranked by face similarity.");
+      showSearchResults(results, "face", "", "Ranked by face similarity.");
     } catch (error) {
       elements.viewerStatus.textContent = error.message || "Face search failed";
       elements.findSimilar.disabled = false;
@@ -418,24 +524,18 @@
     elements.faceLayer.replaceChildren();
     elements.viewerStatus.textContent = "Looking for faces…";
     try {
-      const response = await fetch("/api/faces", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photo_id: photo.id }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Could not load faces");
-      if (!payload.faces.length) {
+      const faces = await requestFaces(photo.id);
+      if (!faces.length) {
         elements.viewerStatus.textContent = "No clear face was found in this photograph.";
         elements.findSimilar.disabled = false;
         elements.findFaces.disabled = false;
         return;
       }
-      if (payload.faces.length === 1) {
-        await searchForFace(payload.faces[0].id);
+      if (faces.length === 1) {
+        await searchForFace(faces[0].id);
         return;
       }
-      payload.faces.forEach((face, index) => {
+      faces.forEach((face, index) => {
         const [x, y, width, height] = face.bbox;
         const button = document.createElement("button");
         button.type = "button";

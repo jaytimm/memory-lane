@@ -6,9 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 from urllib.parse import unquote
 
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from src.browser_index import write_browser_index  # noqa: E402
 
 
 MANIFEST_PREFIX = "window.FAMILY_PHOTO_DATA = "
@@ -126,6 +130,7 @@ def main() -> None:
             if cached_file.is_file() and cached_file.name not in referenced:
                 cached_file.unlink()
 
+    write_browser_index(archive)
     print(f"Kept {len(kept_photos):,} photos; removed {len(removed_photos):,} stale records.")
     print(f"Kept {len(faces['items']):,} faces.")
 

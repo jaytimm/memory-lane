@@ -13,6 +13,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from .archive_data import read_gallery_manifest
+from .browser_index import write_browser_index
 from .clip_model import load_clip, model_identity, preserve_portable_weights
 
 
@@ -176,6 +177,7 @@ def build_embeddings(archive: Path, batch_size: int = 8) -> dict:
         search_dir / ".partial-embeddings.npy",
     ):
         partial_path.unlink(missing_ok=True)
+    write_browser_index(archive)
     print(
         f"Indexed {len(items)} photos ({reused} reused, {total_new} newly embedded) "
         f"into {search_dir}."

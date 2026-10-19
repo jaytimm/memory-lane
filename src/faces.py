@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 
 from .archive_data import read_gallery_manifest
+from .browser_index import write_browser_index
 from .embed import _save_array_atomic
 
 
@@ -246,6 +247,7 @@ def build_face_index(
     _save(search_dir, "faces", identity, processed, items, vectors, settings)
     (search_dir / ".partial-faces.json").unlink(missing_ok=True)
     (search_dir / ".partial-faces.npy").unlink(missing_ok=True)
+    write_browser_index(archive)
     print(
         f"Indexed {len(items):,} faces from {len(photos):,} photos "
         f"({reused:,} reused, {newly_processed:,} newly processed).",
