@@ -8,6 +8,7 @@ gallery. Clicking an example runs it immediately.
 - `headshot`
 - `two smiling faces`
 - `tired`
+- `tired men on benches`
 - `hugs`
 - `arms raised`
 
@@ -16,6 +17,7 @@ gallery. Clicking an example runs it immediately.
 - `camping`
 - `red hats`
 - `an RV`
+- `dogs`
 - `birthday cake and candles`
 
 ## People doing things
@@ -23,10 +25,16 @@ gallery. Clicking an example runs it immediately.
 - `children in the snow`
 - `Christmas cookie decorating`
 - `football`
+- `sports uniforms`
 - `guitar playing`
+- `woodworking`
+- `cooking outdoors`
 - `people swimming in a lake`
 
 ## Something specific
 
 - `a parrot`
+- `back to school`
+- `first day driving`
+- `Halloween`
 - `a wedding celebration`

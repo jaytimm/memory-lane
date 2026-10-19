@@ -5,6 +5,7 @@ window.MEMORY_LANE_SEARCH_EXAMPLES = [
       "headshot",
       "two smiling faces",
       "tired",
+      "tired men on benches",
       "hugs",
       "arms raised"
     ]
@@ -15,6 +16,7 @@ window.MEMORY_LANE_SEARCH_EXAMPLES = [
       "camping",
       "red hats",
       "an RV",
+      "dogs",
       "birthday cake and candles"
     ]
   },
@@ -24,7 +26,10 @@ window.MEMORY_LANE_SEARCH_EXAMPLES = [
       "children in the snow",
       "Christmas cookie decorating",
       "football",
+      "sports uniforms",
       "guitar playing",
+      "woodworking",
+      "cooking outdoors",
       "people swimming in a lake"
     ]
   },
@@ -32,6 +37,9 @@ window.MEMORY_LANE_SEARCH_EXAMPLES = [
     "title": "Something specific",
     "queries": [
       "a parrot",
+      "back to school",
+      "first day driving",
+      "Halloween",
       "a wedding celebration"
     ]
   }
