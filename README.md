@@ -14,6 +14,15 @@ Build a gallery:
 python3 -m src.build --input "/path/to/images" --output ./PhotoArchive
 ```
 
+Opening the gallery's `index.html` directly, without the launcher, still
+supports browsing, **Find similar photos**, **Find this person**, and original
+photographs. Typed search needs the launcher. The embedding, face, and prune
+steps keep the browser search data current; to regenerate it by hand:
+
+```bash
+python3 -m src.browser_index --archive ./PhotoArchive
+```
+
 Run the tests:
 
 ```bash
