@@ -52,6 +52,7 @@ cp -p "$project_root/windows/Start Memory Lane from USB.bat" "$app_root/"
 cp -p "$project_root/windows/START HERE.txt" "$app_root/"
 cp -p "$project_root/windows/VERSION.txt" "$app_root/"
 cp -p "$project_root/USB-README.txt" "$usb_root/README - MEMORY LANE.txt"
+cp -p "$project_root/Open Memory Lane.html" "$usb_root/"
 
 echo ""
 echo "Memory Lane assembled successfully."
