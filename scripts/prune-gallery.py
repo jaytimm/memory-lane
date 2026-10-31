@@ -117,18 +117,16 @@ def main() -> None:
     write_json(faces_path, faces)
 
     for photo in removed_photos:
-        for field in ("preview", "thumbnail"):
-            relative = photo.get(field)
-            if relative:
-                (archive / unquote(relative)).unlink(missing_ok=True)
+        relative = photo.get("thumbnail")
+        if relative:
+            (archive / unquote(relative)).unlink(missing_ok=True)
 
-    for field, directory in (("preview", "previews"), ("thumbnail", "thumbnails")):
-        referenced = {
-            Path(unquote(photo[field])).name for photo in kept_photos if photo.get(field)
-        }
-        for cached_file in (archive / directory).iterdir():
-            if cached_file.is_file() and cached_file.name not in referenced:
-                cached_file.unlink()
+    referenced = {
+        Path(unquote(photo["thumbnail"])).name for photo in kept_photos if photo.get("thumbnail")
+    }
+    for cached_file in (archive / "thumbnails").iterdir():
+        if cached_file.is_file() and cached_file.name not in referenced:
+            cached_file.unlink()
 
     write_browser_index(archive)
     print(f"Kept {len(kept_photos):,} photos; removed {len(removed_photos):,} stale records.")

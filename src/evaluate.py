@@ -55,9 +55,9 @@ def build_evaluation(
         cards = []
         for rank, result in enumerate(results, 1):
             image_url = _relative_url(archive, output, result["thumbnail"])
-            preview_url = _relative_url(archive, output, result["preview"])
+            original_url = _relative_url(archive, output, result["original"])
             cards.append(
-                f'<figure><a href="{preview_url}" target="_blank"><img src="{image_url}" alt="" loading="lazy"></a>'
+                f'<figure><a href="{original_url}" target="_blank"><img src="{image_url}" alt="" loading="lazy"></a>'
                 f'<figcaption><strong>{rank}. {escape(result["filename"])}</strong>'
                 f'<span>{escape(result["album_id"])} · {result["score"]:.3f}</span>'
                 "</figcaption></figure>"

@@ -293,9 +293,9 @@
     const album = albums.get(photo.album_id);
     elements.viewerImage.onerror = () => {
       elements.viewerImage.onerror = null;
-      elements.viewerImage.src = photo.preview;
+      elements.viewerImage.src = photo.thumbnail;
     };
-    elements.viewerImage.src = originalsAvailable ? originalImageUrl(photo) : photo.preview;
+    elements.viewerImage.src = originalsAvailable ? originalImageUrl(photo) : photo.thumbnail;
     elements.viewerImage.alt = photo.filename;
     elements.viewerTitle.textContent = photo.filename;
     elements.viewerAlbum.textContent = album.title;

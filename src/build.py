@@ -18,7 +18,7 @@ from .ingest import (
     album_year_range,
     content_hash,
     discover_images,
-    generate_derivatives,
+    generate_thumbnail,
     stable_image_id,
 )
 from .metadata import match_records_to_folders, read_album_records
@@ -78,17 +78,13 @@ def _process_source(task: tuple) -> tuple[dict | None, dict | None, bool, str | 
     file_hash = cached["sha256"] if unchanged else (checked_hash or content_hash(source.path))
     image_id = stable_image_id(file_hash, relative_key)
     thumbnail_rel = Path("thumbnails") / f"{image_id}.webp"
-    preview_rel = Path("previews") / f"{image_id}.jpg"
     thumbnail_path = output_dir / thumbnail_rel
-    preview_path = output_dir / preview_rel
 
     derivative_metadata = cached.get("image", {}) if unchanged else {}
-    reused = unchanged and thumbnail_path.exists() and preview_path.exists()
+    reused = unchanged and thumbnail_path.exists()
     if not reused:
         try:
-            derivative_metadata = generate_derivatives(
-                source.path, thumbnail_path, preview_path
-            )
+            derivative_metadata = generate_thumbnail(source.path, thumbnail_path)
         except (OSError, ValueError, UnidentifiedImageError) as error:
             return None, None, False, f"Skipped {relative_key}: {error}"
 
@@ -114,7 +110,6 @@ def _process_source(task: tuple) -> tuple[dict | None, dict | None, bool, str | 
         # while the local server exposes it through its configured --photos path.
         "original": _asset_url(original_rel),
         "thumbnail": _asset_url(thumbnail_rel),
-        "preview": _asset_url(preview_rel),
         "width": derivative_metadata.get("width"),
         "height": derivative_metadata.get("height"),
         "exif_date": derivative_metadata.get("exif_date"),
@@ -240,7 +235,7 @@ def build_archive(
 
     print(
         f"Built {len(photo_records)} photos in {len(albums)} albums "
-        f"({reused} unchanged previews reused; {len(warnings)} warnings)."
+        f"({reused} unchanged thumbnails reused; {len(warnings)} warnings)."
     )
     return manifest
 

@@ -32,7 +32,10 @@ fi
 
 mkdir -p "$gallery_root"
 
-for directory in .model-cache assets previews search thumbnails; do
+# Drives assembled before previews were dropped still carry this folder.
+rm -rf "$gallery_root/previews"
+
+for directory in .model-cache assets search thumbnails; do
   if [[ -d "$prepared_gallery/$directory" ]]; then
     mkdir -p "$gallery_root/$directory"
     # FAT/exFAT drives cannot store Unix symlinks. Dereference model-cache

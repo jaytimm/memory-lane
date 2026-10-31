@@ -41,7 +41,7 @@ under `/media/` as read-only. A non-escalated `findmnt` can therefore report
    - `FamilyPhotoArchive/gold-face-labels/`
    - evaluation files
 
-4. Rebuild previews with one worker and low priority:
+4. Rebuild thumbnails with one worker and low priority:
 
    ```bash
    OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
@@ -73,7 +73,7 @@ under `/media/` as read-only. A non-escalated `findmnt` can therefore report
    - manifest photo count equals the source count;
    - album counts sum to the photo count;
    - manifest has zero warnings;
-   - preview and thumbnail counts equal the photo count;
+   - thumbnail count equals the photo count;
    - semantic metadata count equals the embedding matrix rows;
    - face metadata count equals the face matrix rows;
    - every manifest photo resolves to a real USB original.
@@ -81,7 +81,7 @@ under `/media/` as read-only. A non-escalated `findmnt` can therefore report
 9. Synchronize only generated material back to the local cache:
 
    ```text
-   .model-cache/  assets/  previews/  search/  thumbnails/
+   .model-cache/  assets/  search/  thumbnails/
    .build-state.json  index.html  original-view.html  USER-GUIDE.html  README.txt
    ```
 
@@ -95,7 +95,7 @@ under `/media/` as read-only. A non-escalated `findmnt` can therefore report
 ## Orientation-only corrections
 
 If corrected files differ only by EXIF orientation, they still require new
-thumbnails, previews, semantic embeddings, and face processing because the
+thumbnails, semantic embeddings, and face processing because the
 displayed orientation changed. A recent example involved 11 corrected files:
 5,148 of 5,159 records were reused and only those 11 were processed.
 

@@ -1,4 +1,4 @@
-"""Image discovery, hashing, metadata extraction, and preview generation."""
+"""Image discovery, hashing, metadata extraction, and thumbnail generation."""
 
 from __future__ import annotations
 
@@ -91,15 +91,12 @@ def _rgb(image: Image.Image) -> Image.Image:
     return image.convert("RGB")
 
 
-def generate_derivatives(
+def generate_thumbnail(
     source: Path,
     thumbnail_path: Path,
-    preview_path: Path,
     thumbnail_size: int = 400,
-    preview_size: int = 1800,
 ) -> dict:
     thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
-    preview_path.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(source) as opened:
         exif_date = extract_exif_date(opened)
         corrected = ImageOps.exif_transpose(opened)
@@ -108,10 +105,6 @@ def generate_derivatives(
         thumbnail = _rgb(corrected.copy())
         thumbnail.thumbnail((thumbnail_size, thumbnail_size), Image.Resampling.LANCZOS)
         thumbnail.save(thumbnail_path, "WEBP", quality=82, method=6)
-
-        preview = _rgb(corrected.copy())
-        preview.thumbnail((preview_size, preview_size), Image.Resampling.LANCZOS)
-        preview.save(preview_path, "JPEG", quality=88, optimize=True, progressive=True)
 
     return {"width": width, "height": height, "exif_date": exif_date}
 

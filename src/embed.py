@@ -150,7 +150,7 @@ def build_embeddings(archive: Path, batch_size: int = 8) -> dict:
         {
             key: photo.get(key)
             for key in (
-                "id", "sha256", "album_id", "filename", "original", "preview",
+                "id", "sha256", "album_id", "filename", "original",
                 "thumbnail", "date_start", "date_end",
             )
         }

@@ -109,6 +109,8 @@ class BuildIntegrationTests(unittest.TestCase):
             self.assertTrue((output / "USER-GUIDE.html").exists())
             self.assertTrue((output / "assets/search-examples.js").exists())
             self.assertTrue((output / "photos/1976_WEDDING/scan.tiff").exists())
+            self.assertFalse((output / "previews").exists())
+            self.assertNotIn("preview", first["photos"][0])
 
             unicode_record = next(
                 photo for photo in first["photos"] if "Unicode" in photo["relative_source_path"]
