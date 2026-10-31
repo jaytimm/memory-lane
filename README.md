@@ -40,7 +40,7 @@ Keep the originals in `Family Photos/` and all generated app material in
 from Linux with:
 
 ```bash
-./scripts/assemble-usb.sh "/media/user/USB" ./MemoryLane-Windows-x64.zip
+./scripts/assemble-usb.sh "/run/media/user/USB" ./MemoryLane-Windows-x64.zip
 ```
 
 The script copies the prepared gallery cache without duplicating the original

@@ -8,7 +8,7 @@ and must not be used to decide what changed.
 ## Important: do not repeat the read-only detour
 
 The normal restricted development shell deliberately presents external media
-under `/media/` as read-only. A non-escalated `findmnt` can therefore report
+under `/media/` and `/run/media/` as read-only. A non-escalated `findmnt` can therefore report
 `ro` even while the actual host mount is healthy and writable.
 
 - Do not diagnose or repair the USB based on a sandboxed `findmnt` result.
@@ -19,7 +19,7 @@ under `/media/` as read-only. A non-escalated `findmnt` can therefore report
 
 ## Safe incremental update
 
-1. Find the mounted USB and confirm these folders exist:
+1. Find the mounted USB with `lsblk` and confirm these folders exist:
 
    ```text
    USB/
@@ -47,7 +47,7 @@ under `/media/` as read-only. A non-escalated `findmnt` can therefore report
    OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
    NUMEXPR_NUM_THREADS=1 nice -n 15 ionice -c 3 \
    .venv/bin/python -m src.build \
-     --input "/media/user/USB/Family Photos" \
+     --input "/run/media/user/USB/Family Photos" \
      --output "$STAGE" --no-copy-originals --workers 1
    ```
 
@@ -58,14 +58,18 @@ under `/media/` as read-only. A non-escalated `findmnt` can therefore report
 
 6. Refresh the face index with one OpenCV thread. It must reuse unchanged
    records and process only changed photos. A corrected orientation may change
-   the total number of detected faces; that is expected.
+   the total number of detected faces; that is expected. The two face models are
+   not stored in this project. Download them from
+   <https://github.com/opencv/opencv_zoo/tree/main/models>
+   (`face_detection_yunet_2023mar.onnx`, `face_recognition_sface_2021dec.onnx`);
+   `search/faces.json` records their expected SHA-256 values.
 
 7. Run `scripts/prune-gallery.py` with positional arguments to remove orphaned
    records and derivatives:
 
    ```bash
    .venv/bin/python scripts/prune-gallery.py \
-     "$STAGE" "/media/user/USB/Family Photos"
+     "$STAGE" "/run/media/user/USB/Family Photos"
    ```
 
 8. Validate before copying:
