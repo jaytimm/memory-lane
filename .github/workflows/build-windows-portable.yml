@@ -66,7 +66,6 @@ jobs:
           $destination = Join-Path $PWD "dist\WindowsSearch\src"
           New-Item -ItemType Directory -Force -Path $destination | Out-Null
           Copy-Item src\__init__.py,src\archive_data.py,src\clip_model.py,src\search.py,src\serve.py $destination
-          Copy-Item "windows\Start Family Gallery.bat" "dist\Start Family Gallery.bat"
           Copy-Item "windows\README-WINDOWS.txt" "dist\README-WINDOWS.txt"
           Copy-Item "windows\START HERE.txt" "dist\START HERE.txt"
           Copy-Item "windows\VERSION.txt" "dist\VERSION.txt"
