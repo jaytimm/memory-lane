@@ -4,8 +4,9 @@
 # Options: --dry-run (summary only), --usb PATH, --source DIR. See src/update.py.
 set -eu
 
-# rclone path of the shared folder, for example "gdrive:Memory Lane Photos".
-REMOTE="${MEMORY_LANE_REMOTE:-}"
+# rclone path of the shared folder's photos. Only Family Photos is pulled; the
+# Memory Lane folder beside it holds the software and is never read.
+REMOTE="${MEMORY_LANE_REMOTE:-gdrive:JKProject/Family Photos}"
 # Set to yes if the folder appears under "Shared with me" in Google Drive.
 SHARED_WITH_ME="${MEMORY_LANE_SHARED_WITH_ME:-no}"
 
