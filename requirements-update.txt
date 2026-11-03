@@ -1,0 +1,2 @@
+# Update-command only: converts iPhone HEIC photos to JPEG.
+pillow-heif>=1.0,<2

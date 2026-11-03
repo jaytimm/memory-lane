@@ -295,7 +295,8 @@
       elements.viewerImage.onerror = null;
       elements.viewerImage.src = photo.thumbnail;
     };
-    elements.viewerImage.src = originalsAvailable ? originalImageUrl(photo) : photo.thumbnail;
+    // Large photos have a lighter viewing copy; "Go to original" still opens the full file.
+    elements.viewerImage.src = photo.viewing || (originalsAvailable ? originalImageUrl(photo) : photo.thumbnail);
     elements.viewerImage.alt = photo.filename;
     elements.viewerTitle.textContent = photo.filename;
     elements.viewerAlbum.textContent = album.title;

@@ -1,0 +1,19 @@
+#!/bin/sh
+# Add new photos from the shared Google Drive folder to Memory Lane and update
+# the photo USB. Shows a summary and asks before changing anything.
+# Options: --dry-run (summary only), --usb PATH, --source DIR. See src/update.py.
+set -eu
+
+# rclone path of the shared folder, for example "gdrive:Memory Lane Photos".
+REMOTE="${MEMORY_LANE_REMOTE:-}"
+# Set to yes if the folder appears under "Shared with me" in Google Drive.
+SHARED_WITH_ME="${MEMORY_LANE_SHARED_WITH_ME:-no}"
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$SCRIPT_DIR"
+if [ "$SHARED_WITH_ME" = yes ]; then set -- --shared-with-me "$@"; fi
+if [ -n "$REMOTE" ]; then set -- --remote "$REMOTE" "$@"; fi
+
+# One thread and low priority keep the computer usable during a rebuild.
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
+exec nice -n 15 ionice -c 3 "$SCRIPT_DIR/.venv/bin/python" -m src.update "$@"

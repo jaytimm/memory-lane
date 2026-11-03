@@ -19,6 +19,7 @@ from src.search import (
     _candidate_indices,
     rank_embeddings,
 )
+from src.update import describe, make_plan
 from src.text_model import export_text_model, quantize_groups, read_text_model_identity
 from src.serve import (
     original_photo_paths,
@@ -340,6 +341,55 @@ class SemanticRankingTests(unittest.TestCase):
             # A text model from a different model must not search this index.
             export_text_model(path, state, Tokenizer(), {"architecture": "other"}, "{}")
             self.assertIsNone(write_browser_index(archive)["text"])
+
+    def test_update_plan_classifies_new_photos(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            usb = root / "usb"
+            (usb / "1976_WEDDING").mkdir(parents=True)
+            Image.new("RGB", (30, 20), "red").save(usb / "1976_WEDDING" / "kept.jpg")
+            Image.new("RGB", (30, 20), "blue").save(usb / "1976_WEDDING" / "fixed.jpg")
+            archive = root / "archive"
+            build_archive(usb, archive, copy_originals=False)
+
+            incoming = root / "incoming"
+            (incoming / "1976_WEDDING").mkdir(parents=True)
+            (incoming / "Summer stuff").mkdir()
+            (incoming / "2025 Summer").mkdir()
+            (incoming / "1976_WEDDING" / "kept.jpg").write_bytes((usb / "1976_WEDDING" / "kept.jpg").read_bytes())
+            Image.new("RGB", (30, 20), "green").save(incoming / "1976_WEDDING" / "fixed.jpg")
+            Image.new("RGB", (30, 20), "white").save(incoming / "2025 Summer" / "new.jpg")
+            Image.new("RGB", (30, 20), "black").save(incoming / "Summer stuff" / "undated.jpg")
+            (incoming / "2025 Summer" / "phone.heic").write_bytes(b"heic")
+            (incoming / "notes.txt").write_text("not a photo")
+            (incoming / ".DS_Store").write_text("hidden")
+
+            plan = make_plan(incoming, usb, archive, ledger={})
+            self.assertEqual(
+                sorted(target.as_posix() for _, target in plan.add),
+                ["2025 Summer/new.jpg", "2025 Summer/phone.jpg", "Summer stuff/undated.jpg"],
+            )
+            self.assertEqual([target.as_posix() for _, target in plan.replace], ["1976_WEDDING/fixed.jpg"])
+            self.assertEqual(list(plan.heic_hashes), ["2025 Summer/phone.heic"])
+            self.assertEqual(plan.ignored, ["notes.txt"])
+            self.assertEqual(plan.new_albums, {"2025 Summer", "Summer stuff"})
+            self.assertEqual(len(plan.warnings), 1)
+            self.assertIn("Summer stuff", plan.warnings[0])
+            self.assertEqual((plan.gallery_missing, plan.gallery_changed, plan.gallery_removed), (0, 0, 0))
+            summary = describe(plan)
+            self.assertIn("3 photos added", summary)
+            self.assertIn("1 file that is not a photo", summary)
+
+            # A HEIC already converted on an earlier run is skipped, and a
+            # photo copied straight onto the USB is noticed.
+            (usb / "2025 Summer").mkdir()
+            Image.new("RGB", (30, 20), "white").save(usb / "2025 Summer" / "phone.jpg")
+            ledger = dict(plan.heic_hashes)
+            (usb / "1976_WEDDING" / "kept.jpg").unlink()
+            later = make_plan(incoming, usb, archive, ledger)
+            self.assertNotIn("2025 Summer/phone.jpg", [target.as_posix() for _, target in later.add + later.replace])
+            self.assertEqual((later.gallery_missing, later.gallery_removed), (1, 1))
+            self.assertTrue(later.needs_rebuild)
 
     def test_face_request_validation(self):
         self.assertEqual(parse_photo_faces_request({"photo_id": "abc"}), "abc")

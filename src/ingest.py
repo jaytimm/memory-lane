@@ -91,9 +91,18 @@ def _rgb(image: Image.Image) -> Image.Image:
     return image.convert("RGB")
 
 
+VIEWING_SIZE = 1800
+
+
+def needs_viewing_copy(width: int | None, height: int | None) -> bool:
+    """Large photos (such as phone pictures) get a lighter copy for the viewer."""
+    return max(width or 0, height or 0) > VIEWING_SIZE
+
+
 def generate_thumbnail(
     source: Path,
     thumbnail_path: Path,
+    viewing_path: Path | None = None,
     thumbnail_size: int = 400,
 ) -> dict:
     thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
@@ -105,6 +114,12 @@ def generate_thumbnail(
         thumbnail = _rgb(corrected.copy())
         thumbnail.thumbnail((thumbnail_size, thumbnail_size), Image.Resampling.LANCZOS)
         thumbnail.save(thumbnail_path, "WEBP", quality=82, method=6)
+
+        if viewing_path is not None and needs_viewing_copy(width, height):
+            viewing_path.parent.mkdir(parents=True, exist_ok=True)
+            viewing = _rgb(corrected.copy())
+            viewing.thumbnail((VIEWING_SIZE, VIEWING_SIZE), Image.Resampling.LANCZOS)
+            viewing.save(viewing_path, "JPEG", quality=88, optimize=True, progressive=True)
 
     return {"width": width, "height": height, "exif_date": exif_date}
 

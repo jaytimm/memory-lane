@@ -19,6 +19,7 @@ from .ingest import (
     content_hash,
     discover_images,
     generate_thumbnail,
+    needs_viewing_copy,
     stable_image_id,
 )
 from .metadata import match_records_to_folders, read_album_records
@@ -26,6 +27,7 @@ from .metadata import match_records_to_folders, read_album_records
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = PROJECT_ROOT / "web"
+SPREADSHEET_NAME = "Album Contents.xlsx"
 
 
 def _load_state(path: Path) -> dict:
@@ -79,14 +81,24 @@ def _process_source(task: tuple) -> tuple[dict | None, dict | None, bool, str | 
     image_id = stable_image_id(file_hash, relative_key)
     thumbnail_rel = Path("thumbnails") / f"{image_id}.webp"
     thumbnail_path = output_dir / thumbnail_rel
+    viewing_rel = Path("viewing") / f"{image_id}.jpg"
+    viewing_path = output_dir / viewing_rel
 
     derivative_metadata = cached.get("image", {}) if unchanged else {}
-    reused = unchanged and thumbnail_path.exists()
+    reused = (
+        unchanged
+        and thumbnail_path.exists()
+        and (
+            not needs_viewing_copy(derivative_metadata.get("width"), derivative_metadata.get("height"))
+            or viewing_path.exists()
+        )
+    )
     if not reused:
         try:
-            derivative_metadata = generate_thumbnail(source.path, thumbnail_path)
+            derivative_metadata = generate_thumbnail(source.path, thumbnail_path, viewing_path)
         except (OSError, ValueError, UnidentifiedImageError) as error:
             return None, None, False, f"Skipped {relative_key}: {error}"
+    has_viewing = needs_viewing_copy(derivative_metadata.get("width"), derivative_metadata.get("height"))
 
     original_rel = Path("photos") / source.relative_path
     if copy_originals:
@@ -110,6 +122,7 @@ def _process_source(task: tuple) -> tuple[dict | None, dict | None, bool, str | 
         # while the local server exposes it through its configured --photos path.
         "original": _asset_url(original_rel),
         "thumbnail": _asset_url(thumbnail_rel),
+        **({"viewing": _asset_url(viewing_rel)} if has_viewing else {}),
         "width": derivative_metadata.get("width"),
         "height": derivative_metadata.get("height"),
         "exif_date": derivative_metadata.get("exif_date"),
@@ -125,6 +138,33 @@ def _process_source(task: tuple) -> tuple[dict | None, dict | None, bool, str | 
         "image": derivative_metadata,
     }
     return record, state_entry, reused, None
+
+
+def build_albums(spreadsheet: Path, discovered: list) -> list[dict]:
+    """Album entries for the manifest, with descriptions from the spreadsheet."""
+    folders = sorted({image.album_folder for image in discovered}, key=str.casefold)
+    curated_records = read_album_records(spreadsheet) if spreadsheet.exists() else []
+    curated_by_folder = match_records_to_folders(curated_records, folders)
+    counts = Counter(image.album_folder for image in discovered)
+
+    albums: list[dict] = []
+    for folder in folders:
+        record = curated_by_folder.get(folder)
+        date_start, date_end = album_year_range(folder)
+        albums.append(
+            {
+                "id": folder,
+                "folder": folder,
+                "title": _display_title(record.years if record else folder),
+                "date_start": date_start,
+                "date_end": date_end,
+                "description": record.description if record else "",
+                "album_number": record.number if record else None,
+                "expected_count": record.expected_count if record else None,
+                "actual_count": counts[folder],
+            }
+        )
+    return albums
 
 
 def build_archive(
@@ -156,29 +196,7 @@ def build_archive(
     if not discovered:
         raise ValueError("No supported images matched the requested input and album filters")
 
-    folders = sorted({image.album_folder for image in discovered}, key=str.casefold)
-    spreadsheet = input_dir / "Album Contents.xlsx"
-    curated_records = read_album_records(spreadsheet) if spreadsheet.exists() else []
-    curated_by_folder = match_records_to_folders(curated_records, folders)
-    counts = Counter(image.album_folder for image in discovered)
-
-    albums: list[dict] = []
-    for folder in folders:
-        record = curated_by_folder.get(folder)
-        date_start, date_end = album_year_range(folder)
-        albums.append(
-            {
-                "id": folder,
-                "folder": folder,
-                "title": _display_title(record.years if record else folder),
-                "date_start": date_start,
-                "date_end": date_end,
-                "description": record.description if record else "",
-                "album_number": record.number if record else None,
-                "expected_count": record.expected_count if record else None,
-                "actual_count": counts[folder],
-            }
-        )
+    albums = build_albums(input_dir / SPREADSHEET_NAME, discovered)
 
     state_path = output_dir / ".build-state.json"
     state = _load_state(state_path)
