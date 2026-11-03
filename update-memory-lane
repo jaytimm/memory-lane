@@ -8,7 +8,7 @@ set -eu
 # Memory Lane folder beside it holds the software and is never read.
 REMOTE="${MEMORY_LANE_REMOTE:-gdrive:JKProject/Family Photos}"
 # Set to yes if the folder appears under "Shared with me" in Google Drive.
-SHARED_WITH_ME="${MEMORY_LANE_SHARED_WITH_ME:-no}"
+SHARED_WITH_ME="${MEMORY_LANE_SHARED_WITH_ME:-yes}"
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$SCRIPT_DIR"
