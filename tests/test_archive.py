@@ -358,6 +358,8 @@ class SemanticRankingTests(unittest.TestCase):
             (incoming / "2025 Summer").mkdir()
             (incoming / "1976_WEDDING" / "kept.jpg").write_bytes((usb / "1976_WEDDING" / "kept.jpg").read_bytes())
             Image.new("RGB", (30, 20), "green").save(incoming / "1976_WEDDING" / "fixed.jpg")
+            # The same picture under a new name is a duplicate, not a new photo.
+            (incoming / "1976_WEDDING" / "renamed.jpg").write_bytes((usb / "1976_WEDDING" / "kept.jpg").read_bytes())
             Image.new("RGB", (30, 20), "white").save(incoming / "2025 Summer" / "new.jpg")
             Image.new("RGB", (30, 20), "black").save(incoming / "Summer stuff" / "undated.jpg")
             (incoming / "2025 Summer" / "phone.heic").write_bytes(b"heic")
@@ -369,7 +371,9 @@ class SemanticRankingTests(unittest.TestCase):
                 sorted(target.as_posix() for _, target in plan.add),
                 ["2025 Summer/new.jpg", "2025 Summer/phone.jpg", "Summer stuff/undated.jpg"],
             )
-            self.assertEqual([target.as_posix() for _, target in plan.replace], ["1976_WEDDING/fixed.jpg"])
+            # A different version of an existing photo is left alone.
+            self.assertEqual(plan.replace, [])
+            self.assertEqual(plan.duplicates, 1)
             self.assertEqual(list(plan.heic_hashes), ["2025 Summer/phone.heic"])
             self.assertEqual(plan.ignored, ["notes.txt"])
             self.assertEqual(plan.new_albums, {"2025 Summer", "Summer stuff"})

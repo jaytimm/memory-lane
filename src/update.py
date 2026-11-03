@@ -61,6 +61,7 @@ class Plan:
     ignored: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     new_albums: set[str] = field(default_factory=set)
+    duplicates: int = 0
     gallery_missing: int = 0
     gallery_changed: int = 0
     gallery_removed: int = 0
@@ -148,6 +149,9 @@ def _album_summary(albums: list[dict]) -> dict[str, tuple]:
 def make_plan(incoming: Path | None, photo_root: Path, archive: Path, ledger: dict) -> Plan:
     plan = Plan()
     planned_targets: dict[str, str] = {}
+    state = _read_json(archive / ".build-state.json", {}).get("files", {})
+    usb_hashes = {entry.get("sha256") for entry in state.values()}
+    usb_hashes.update(ledger.values())
 
     if incoming is not None and incoming.is_dir():
         for path in sorted(incoming.rglob("*"), key=lambda item: item.as_posix().casefold()):
@@ -176,18 +180,18 @@ def make_plan(incoming: Path | None, photo_root: Path, archive: Path, ledger: di
                 continue
             planned_targets[key.casefold()] = relative.as_posix()
 
-            source_hash = _sha256(path)
+            # Only new photos are added. Anything already on the USB, by path
+            # or by content under another name, is left exactly as it is.
             destination = photo_root / target
-            if suffix in HEIC_EXTENSIONS:
-                if destination.is_file() and ledger.get(relative.as_posix()) == source_hash:
-                    continue
-                plan.heic_hashes[relative.as_posix()] = source_hash
-            elif destination.is_file() and (
-                destination.stat().st_size == path.stat().st_size
-                and _sha256(destination) == source_hash
-            ):
+            if destination.is_file():
                 continue
-            (plan.replace if destination.is_file() else plan.add).append((path, target))
+            source_hash = _sha256(path)
+            if source_hash in usb_hashes:
+                plan.duplicates += 1
+                continue
+            if suffix in HEIC_EXTENSIONS:
+                plan.heic_hashes[relative.as_posix()] = source_hash
+            plan.add.append((path, target))
 
             if len(target.parts) == 1:
                 plan.warnings.append(
@@ -205,7 +209,6 @@ def make_plan(incoming: Path | None, photo_root: Path, archive: Path, ledger: di
     # Photos already on the USB that the gallery does not reflect yet, such as
     # photos copied by an earlier run that stopped before rebuilding.
     manifest = read_gallery_manifest(archive)
-    state = _read_json(archive / ".build-state.json", {}).get("files", {})
     on_usb = discover_images(photo_root)
     in_gallery = {photo["relative_source_path"] for photo in manifest["photos"]}
     usb_paths = set()
@@ -238,8 +241,8 @@ def describe(plan: Plan) -> str:
                 for album, count in sorted(by_album.items())
             )
             lines.append(f"  {_plural(len(plan.add), 'photo')} added ({details})")
-        if plan.replace:
-            lines.append(f"  {_plural(len(plan.replace), 'photo')} changed")
+        if plan.duplicates:
+            lines.append(f"  {_plural(plan.duplicates, 'photo')} already on the USB under another name, skipped")
         if plan.heic_hashes:
             lines.append(f"  {_plural(len(plan.heic_hashes), 'iPhone photo')} will be converted to JPEG")
         if plan.spreadsheet:
