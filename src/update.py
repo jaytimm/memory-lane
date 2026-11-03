@@ -1,14 +1,14 @@
 """Add new photos to Memory Lane and refresh the gallery on the photo USB.
 
 One run:
-  1. pulls new photos from the shared Google Drive folder with rclone (optional);
-  2. compares them with the USB and prints a plain-English summary;
-  3. after approval, copies them into the USB's Family Photos folders,
-     converting iPhone HEIC photos to JPEG;
+  1. reads the shared Google Drive folder's file list with rclone (optional);
+  2. compares it with the USB and prints a plain-English summary;
+  3. after approval, downloads only the new photos and copies them into the
+     USB's Family Photos folders, converting iPhone HEIC photos to JPEG;
   4. rebuilds only what changed in a temporary staging gallery;
   5. validates the result, then updates the local cache and the USB gallery.
 
-Photos are only ever added or replaced. Nothing is deleted from Family Photos.
+Only new photos are added. Nothing in Family Photos is replaced or deleted.
 """
 
 from __future__ import annotations
@@ -54,10 +54,9 @@ class UpdateError(Exception):
 
 @dataclass
 class Plan:
-    add: list[tuple[Path, Path]] = field(default_factory=list)
-    replace: list[tuple[Path, Path]] = field(default_factory=list)
+    add: list[tuple["Entry", Path]] = field(default_factory=list)
     heic_hashes: dict[str, str] = field(default_factory=dict)
-    spreadsheet: Path | None = None
+    spreadsheet: "Entry | None" = None
     ignored: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     new_albums: set[str] = field(default_factory=set)
@@ -69,7 +68,7 @@ class Plan:
 
     @property
     def copies_files(self) -> bool:
-        return bool(self.add or self.replace or self.spreadsheet)
+        return bool(self.add or self.spreadsheet)
 
     @property
     def needs_rebuild(self) -> bool:
@@ -116,7 +115,24 @@ def find_usb(explicit: Path | None) -> Path:
     return found[0]
 
 
-def pull(remote: str, incoming: Path, shared_with_me: bool) -> None:
+@dataclass
+class Entry:
+    """A file in the shared folder: its path there, size, and MD5 checksum."""
+
+    relative: Path
+    size: int
+    md5: str | None
+
+
+def _md5(path: Path) -> str:
+    digest = hashlib.md5()
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _rclone(remote: str, shared_with_me: bool, *arguments: str) -> list[str]:
     if shutil.which("rclone") is None:
         raise UpdateError("rclone is not installed")
     remote_name = remote.split(":", 1)[0] + ":"
@@ -126,13 +142,76 @@ def pull(remote: str, incoming: Path, shared_with_me: bool) -> None:
             f"rclone has no remote called {remote_name[:-1]}. Run `rclone config` and add a "
             "read-only Google Drive remote with that name."
         )
-    incoming.mkdir(parents=True, exist_ok=True)
-    command = ["rclone", "copy", remote, str(incoming), "--stats-one-line", "--stats", "10s"]
-    if shared_with_me:
-        command.append("--drive-shared-with-me")
-    print(f"Fetching new photos from {remote} ...", flush=True)
-    if subprocess.run(command).returncode != 0:
-        raise UpdateError("rclone could not fetch the Google Drive folder")
+    return ["rclone", *arguments, *(["--drive-shared-with-me"] if shared_with_me else [])]
+
+
+def remote_entries(remote: str, shared_with_me: bool) -> list[Entry]:
+    """List the shared folder without downloading it; Drive reports MD5s."""
+    print(f"Reading the file list of {remote} ...", flush=True)
+    command = _rclone(remote, shared_with_me, "lsjson", "-R", "--files-only", "--hash", remote)
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise UpdateError(f"rclone could not list the Google Drive folder: {result.stderr.strip()[-300:]}")
+    return [
+        Entry(Path(item["Path"]), item.get("Size", -1), (item.get("Hashes") or {}).get("md5"))
+        for item in json.loads(result.stdout)
+    ]
+
+
+def local_entries(folder: Path) -> list[Entry]:
+    return [
+        Entry(path.relative_to(folder), path.stat().st_size, _md5(path))
+        for path in folder.rglob("*")
+        if path.is_file()
+    ]
+
+
+def download(remote: str, shared_with_me: bool, entries: list[Entry], destination: Path) -> None:
+    """Download only the listed files, then confirm each matches Drive's MD5."""
+    if destination.exists():
+        shutil.rmtree(destination)
+    destination.mkdir(parents=True)
+    file_list = destination.parent / "download-list.txt"
+    file_list.write_text("".join(f"{entry.relative.as_posix()}\n" for entry in entries), encoding="utf-8")
+    print(f"Downloading {_plural(len(entries), 'file')} ...", flush=True)
+    command = _rclone(
+        remote, shared_with_me, "copy", remote, str(destination),
+        "--files-from-raw", str(file_list), "--no-traverse", "--stats-one-line", "--stats", "10s",
+    )
+    result = subprocess.run(command)
+    file_list.unlink(missing_ok=True)
+    if result.returncode != 0:
+        raise UpdateError("rclone could not download the new photos")
+    for entry in entries:
+        path = destination / entry.relative
+        if not path.is_file() or (entry.md5 and _md5(path) != entry.md5):
+            raise UpdateError(f"Download of {entry.relative.as_posix()} is incomplete; nothing was changed")
+
+
+def usb_md5s(photo_root: Path, cache_path: Path) -> set[str]:
+    """MD5s of every photo on the USB, cached by path, size, and time."""
+    cache = _read_json(cache_path, {})
+    current = {}
+    images = discover_images(photo_root)
+    pending = [
+        image for image in images
+        if (entry := cache.get(image.relative_path.as_posix())) is None
+        or entry["size"] != image.size
+        or entry["mtime_ns"] != image.mtime_ns
+    ]
+    if len(pending) > 50:
+        print(f"Checking {_plural(len(pending), 'photo')} on the USB (only needed once) ...", flush=True)
+    for image in images:
+        key = image.relative_path.as_posix()
+        entry = cache.get(key)
+        if entry is None or entry["size"] != image.size or entry["mtime_ns"] != image.mtime_ns:
+            entry = {"size": image.size, "mtime_ns": image.mtime_ns, "md5": _md5(image.path)}
+        current[key] = entry
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = cache_path.with_name(cache_path.name + ".tmp")
+    temporary.write_text(json.dumps(current), encoding="utf-8")
+    os.replace(temporary, cache_path)
+    return {entry["md5"] for entry in current.values()}
 
 
 def _read_json(path: Path, default):
@@ -146,24 +225,28 @@ def _album_summary(albums: list[dict]) -> dict[str, tuple]:
     return {album["id"]: (album["title"], album["description"]) for album in albums}
 
 
-def make_plan(incoming: Path | None, photo_root: Path, archive: Path, ledger: dict) -> Plan:
+def make_plan(
+    entries: list[Entry], photo_root: Path, archive: Path, ledger: dict, usb_md5: set[str]
+) -> Plan:
     plan = Plan()
     planned_targets: dict[str, str] = {}
-    state = _read_json(archive / ".build-state.json", {}).get("files", {})
-    usb_hashes = {entry.get("sha256") for entry in state.values()}
-    usb_hashes.update(ledger.values())
+    known = usb_md5 | set(ledger.values())
 
-    if incoming is not None and incoming.is_dir():
-        for path in sorted(incoming.rglob("*"), key=lambda item: item.as_posix().casefold()):
-            if not path.is_file() or any(part.startswith(".") for part in path.relative_to(incoming).parts):
+    if entries:
+        for entry in sorted(entries, key=lambda item: item.relative.as_posix().casefold()):
+            relative = entry.relative
+            if any(part.startswith(".") for part in relative.parts):
                 continue
-            relative = path.relative_to(incoming)
             if relative.as_posix() == SPREADSHEET_NAME:
                 current = photo_root / SPREADSHEET_NAME
-                if not current.is_file() or _sha256(current) != _sha256(path):
-                    plan.spreadsheet = path
+                if entry.md5 and (not current.is_file() or _md5(current) != entry.md5):
+                    plan.spreadsheet = entry
                 continue
-            suffix = path.suffix.casefold()
+            suffix = relative.suffix.casefold()
+            if entry.md5 is None or entry.size < 0:
+                # Google Docs and other files with no downloadable content.
+                plan.ignored.append(relative.as_posix())
+                continue
             if suffix in HEIC_EXTENSIONS:
                 target = relative.with_suffix(".jpg")
             elif suffix in SUPPORTED_EXTENSIONS:
@@ -185,13 +268,12 @@ def make_plan(incoming: Path | None, photo_root: Path, archive: Path, ledger: di
             destination = photo_root / target
             if destination.is_file():
                 continue
-            source_hash = _sha256(path)
-            if source_hash in usb_hashes:
+            if entry.md5 in known:
                 plan.duplicates += 1
                 continue
             if suffix in HEIC_EXTENSIONS:
-                plan.heic_hashes[relative.as_posix()] = source_hash
-            plan.add.append((path, target))
+                plan.heic_hashes[relative.as_posix()] = entry.md5
+            plan.add.append((entry, target))
 
             if len(target.parts) == 1:
                 plan.warnings.append(
@@ -209,6 +291,7 @@ def make_plan(incoming: Path | None, photo_root: Path, archive: Path, ledger: di
     # Photos already on the USB that the gallery does not reflect yet, such as
     # photos copied by an earlier run that stopped before rebuilding.
     manifest = read_gallery_manifest(archive)
+    state = _read_json(archive / ".build-state.json", {}).get("files", {})
     on_usb = discover_images(photo_root)
     in_gallery = {photo["relative_source_path"] for photo in manifest["photos"]}
     usb_paths = set()
@@ -232,7 +315,7 @@ def make_plan(incoming: Path | None, photo_root: Path, archive: Path, ledger: di
 
 def describe(plan: Plan) -> str:
     lines: list[str] = []
-    if plan.add or plan.replace or plan.spreadsheet:
+    if plan.add or plan.spreadsheet:
         lines.append("From the Google Drive folder:")
         if plan.add:
             by_album = Counter(target.parts[0] if len(target.parts) > 1 else "Unsorted" for _, target in plan.add)
@@ -300,15 +383,14 @@ def convert_heic(source: Path, destination: Path) -> None:
         upright.convert("RGB").save(destination, "JPEG", quality=92, exif=exif.tobytes())
 
 
-def apply(plan: Plan, photo_root: Path, ledger_path: Path, ledger: dict) -> None:
-    items = plan.add + plan.replace
-    for position, (source, target) in enumerate(items, start=1):
-        convert = source.suffix.casefold() in HEIC_EXTENSIONS
-        _copy_into_place(source, photo_root / target, convert)
-        if position % 25 == 0 or position == len(items):
-            print(f"Copied {position}/{len(items)} photos to the USB", flush=True)
+def apply(plan: Plan, source_dir: Path, photo_root: Path, ledger_path: Path, ledger: dict) -> None:
+    for position, (entry, target) in enumerate(plan.add, start=1):
+        convert = entry.relative.suffix.casefold() in HEIC_EXTENSIONS
+        _copy_into_place(source_dir / entry.relative, photo_root / target, convert)
+        if position % 25 == 0 or position == len(plan.add):
+            print(f"Copied {position}/{len(plan.add)} photos to the USB", flush=True)
     if plan.spreadsheet:
-        _copy_into_place(plan.spreadsheet, photo_root / SPREADSHEET_NAME, convert=False)
+        _copy_into_place(source_dir / plan.spreadsheet.relative, photo_root / SPREADSHEET_NAME, convert=False)
     if plan.heic_hashes:
         ledger.update(plan.heic_hashes)
         temporary = ledger_path.with_name(ledger_path.name + ".tmp")
@@ -484,17 +566,19 @@ def run(args: argparse.Namespace) -> int:
     print(f"Photo USB: {usb}")
     check_in_step(archive, gallery)
 
-    incoming = args.source
-    if not args.remote and not args.source:
-        print("No Google Drive folder given; checking the USB for photos added by hand.")
+    entries: list[Entry] = []
     if args.remote:
-        incoming = args.work / "incoming"
-        pull(args.remote, incoming, args.shared_with_me)
+        entries = remote_entries(args.remote, args.shared_with_me)
+    elif args.source:
+        entries = local_entries(args.source)
+    else:
+        print("No Google Drive folder given; checking the USB for photos added by hand.")
 
     ledger_path = gallery / LEDGER_NAME
     ledger = _read_json(ledger_path, {})
     print("Comparing photos ...", flush=True)
-    plan = make_plan(incoming, photo_root, archive, ledger)
+    known = usb_md5s(photo_root, args.work / "usb-md5.json") if entries else set()
+    plan = make_plan(entries, photo_root, archive, ledger, known)
     print()
     print(describe(plan))
     if not plan.needs_rebuild or args.dry_run:
@@ -506,7 +590,14 @@ def run(args: argparse.Namespace) -> int:
             return 0
 
     if plan.copies_files:
-        apply(plan, photo_root, ledger_path, ledger)
+        source_dir = args.source
+        if args.remote:
+            source_dir = args.work / "download"
+            wanted = [entry for entry, _ in plan.add] + ([plan.spreadsheet] if plan.spreadsheet else [])
+            download(args.remote, args.shared_with_me, wanted, source_dir)
+        apply(plan, source_dir, photo_root, ledger_path, ledger)
+        if args.remote:
+            shutil.rmtree(source_dir)
     stage = args.work / "stage"
     prepare_stage(archive, photo_root, stage)
     rebuild(stage, photo_root, archive)

@@ -19,7 +19,7 @@ from src.search import (
     _candidate_indices,
     rank_embeddings,
 )
-from src.update import describe, make_plan
+from src.update import describe, local_entries, make_plan, usb_md5s
 from src.text_model import export_text_model, quantize_groups, read_text_model_identity
 from src.serve import (
     original_photo_paths,
@@ -366,13 +366,12 @@ class SemanticRankingTests(unittest.TestCase):
             (incoming / "notes.txt").write_text("not a photo")
             (incoming / ".DS_Store").write_text("hidden")
 
-            plan = make_plan(incoming, usb, archive, ledger={})
+            plan = make_plan(local_entries(incoming), usb, archive, {}, usb_md5s(usb, root / "md5.json"))
             self.assertEqual(
                 sorted(target.as_posix() for _, target in plan.add),
                 ["2025 Summer/new.jpg", "2025 Summer/phone.jpg", "Summer stuff/undated.jpg"],
             )
             # A different version of an existing photo is left alone.
-            self.assertEqual(plan.replace, [])
             self.assertEqual(plan.duplicates, 1)
             self.assertEqual(list(plan.heic_hashes), ["2025 Summer/phone.heic"])
             self.assertEqual(plan.ignored, ["notes.txt"])
@@ -390,8 +389,8 @@ class SemanticRankingTests(unittest.TestCase):
             Image.new("RGB", (30, 20), "white").save(usb / "2025 Summer" / "phone.jpg")
             ledger = dict(plan.heic_hashes)
             (usb / "1976_WEDDING" / "kept.jpg").unlink()
-            later = make_plan(incoming, usb, archive, ledger)
-            self.assertNotIn("2025 Summer/phone.jpg", [target.as_posix() for _, target in later.add + later.replace])
+            later = make_plan(local_entries(incoming), usb, archive, ledger, usb_md5s(usb, root / "md5.json"))
+            self.assertNotIn("2025 Summer/phone.jpg", [target.as_posix() for _, target in later.add])
             self.assertEqual((later.gallery_missing, later.gallery_removed), (1, 1))
             self.assertTrue(later.needs_rebuild)
 
