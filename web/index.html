@@ -31,7 +31,7 @@
           <div id="decade-filter" class="decade-list"></div>
         </fieldset>
         <label id="semantic-field" class="semantic-field" hidden>
-          <span>Describe the photograph</span>
+          <span>Describe the photograph <span class="field-hint">(or leave empty for a random selection)</span></span>
           <input id="semantic-query" type="search" autocomplete="off" placeholder="For example, a parrot">
         </label>
         <div class="search-actions">
@@ -63,6 +63,7 @@
           <h2 id="photos-heading">Photographs</h2>
           <p id="active-period" class="album-description" hidden></p>
           <p id="active-description" class="album-description"></p>
+          <button id="reshuffle" type="button" class="quiet-button reshuffle-button" hidden>Show different photographs</button>
         </div>
         <p id="result-count" class="result-count"></p>
       </div>

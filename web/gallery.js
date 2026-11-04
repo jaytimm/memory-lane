@@ -27,6 +27,7 @@
     photosHeading: document.querySelector("#photos-heading"),
     period: document.querySelector("#active-period"),
     description: document.querySelector("#active-description"),
+    reshuffle: document.querySelector("#reshuffle"),
     count: document.querySelector("#result-count"),
     grid: document.querySelector("#photo-grid"),
     empty: document.querySelector("#empty-state"),
@@ -51,6 +52,8 @@
   let viewerIndex = -1;
   let activeAlbumId = "";
   let readyText = "";
+  // Decades used by the last random selection, for "Show different photographs".
+  let randomDecades = [];
   let searchPhotos = null;
   let searchMode = null;
   let searchQuery = "";
@@ -287,6 +290,7 @@
     elements.empty.hidden = filteredPhotos.length !== 0;
     elements.loadMore.hidden = limit >= filteredPhotos.length;
     elements.backToSearch.hidden = nothingChosen;
+    elements.reshuffle.hidden = searchMode !== "random";
 
     document.querySelectorAll(".album-card").forEach((card) => {
       card.classList.toggle("active", card.dataset.albumId === activeAlbumId);
@@ -537,6 +541,21 @@
     if (!(await enableServerSearch())) enableBrowserSearch();
   }
 
+  function showRandom(decades) {
+    const candidates = data.photos.filter((photo) => inDecades(photo, decades));
+    for (let index = candidates.length - 1; index > 0; index -= 1) {
+      const swap = Math.floor(Math.random() * (index + 1));
+      [candidates[index], candidates[swap]] = [candidates[swap], candidates[index]];
+    }
+    const sample = candidates.slice(0, SEARCH_LIMIT);
+    randomDecades = decades;
+    showSearchResults(sample, "random", "", "");
+    const within = decades.length ? ` from the ${decadeLabel(decades)}` : "";
+    elements.semanticStatus.textContent = `${plural(sample.length, "random photograph")}${within}.`;
+  }
+
+  elements.reshuffle.addEventListener("click", () => showRandom(randomDecades));
+
   elements.semanticForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     // Search applies everything in the box: ticked decades and any words.
@@ -552,14 +571,7 @@
     const within = decades.length ? ` from the ${decadeLabel(decades)}` : "";
     activeAlbumId = "";
     if (!query) {
-      const candidates = data.photos.filter((photo) => inDecades(photo, decades));
-      for (let index = candidates.length - 1; index > 0; index -= 1) {
-        const swap = Math.floor(Math.random() * (index + 1));
-        [candidates[index], candidates[swap]] = [candidates[swap], candidates[index]];
-      }
-      const sample = candidates.slice(0, SEARCH_LIMIT);
-      showSearchResults(sample, "random", "", "Click Search again for a different selection.");
-      elements.semanticStatus.textContent = `${plural(sample.length, "random photograph")}${within}.`;
+      showRandom(decades);
       return;
     }
     elements.semanticSubmit.disabled = true;
