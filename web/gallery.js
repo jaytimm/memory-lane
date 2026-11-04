@@ -2,8 +2,8 @@
   "use strict";
 
   const data = window.FAMILY_PHOTO_DATA;
-  const PAGE_SIZE = 80;
-  // Albums show 100 photos at a time; searches show only their best matches.
+  // Albums show 100 photos at a time. Every search shows 50: the best matches
+  // for its words, or a random selection when there are no words.
   const ALBUM_PAGE_SIZE = 100;
   const SEARCH_LIMIT = 50;
   const albums = new Map(data.albums.map((album) => [album.id, album]));
@@ -47,11 +47,9 @@
   };
 
   let filteredPhotos = data.photos;
-  let shown = PAGE_SIZE;
+  let shown = ALBUM_PAGE_SIZE;
   let viewerIndex = -1;
   let activeAlbumId = "";
-  // Decades applied by the last Search; the checkboxes may differ until then.
-  let activeDecades = [];
   let readyText = "";
   let searchPhotos = null;
   let searchMode = null;
@@ -88,13 +86,25 @@
     return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
   }
 
-  function checkedDecades() {
-    return [...elements.decadeFilter.querySelectorAll("input:checked")].map((box) => Number(box.value));
+  function decadeBoxes() {
+    return [...elements.decadeFilter.querySelectorAll("input[data-decade]")];
   }
 
-  function clearDecades() {
-    activeDecades = [];
-    elements.decadeFilter.querySelectorAll("input").forEach((box) => { box.checked = false; });
+  function checkedDecades() {
+    return decadeBoxes().filter((box) => box.checked).map((box) => Number(box.dataset.decade));
+  }
+
+  // Every decade starts ticked; "All years" ticks or unticks them together.
+  function updateAllYears() {
+    const allYears = elements.decadeFilter.querySelector("input[data-all-years]");
+    const ticked = checkedDecades().length;
+    allYears.checked = ticked === decadeBoxes().length;
+    allYears.indeterminate = ticked > 0 && !allYears.checked;
+  }
+
+  function resetDecades() {
+    decadeBoxes().forEach((box) => { box.checked = true; });
+    updateAllYears();
   }
 
   function clearSearch(clearInput = false) {
@@ -110,9 +120,9 @@
   // "Clear search" resets everything and returns to the search box.
   function clearEverything() {
     clearSearch(true);
-    clearDecades();
+    resetDecades();
     activeAlbumId = "";
-    shown = PAGE_SIZE;
+    shown = ALBUM_PAGE_SIZE;
     render();
     elements.controls.scrollIntoView({ behavior: "smooth" });
     if (!elements.semanticField.hidden) elements.semanticQuery.focus({ preventScroll: true });
@@ -130,17 +140,27 @@
     }
 
     // Ticking a decade does nothing until Search is pressed.
-    const decades = [...new Set(data.photos.map(photoDecade).filter(Boolean))].sort();
-    decades.forEach((decade) => {
+    const decadeOption = (text, attribute, value) => {
       const option = document.createElement("label");
       option.className = "decade-option";
       const box = document.createElement("input");
       box.type = "checkbox";
-      box.value = String(decade);
+      box.checked = true;
+      box.dataset[attribute] = value;
       const name = document.createElement("span");
-      name.textContent = `${decade}s`;
+      name.textContent = text;
       option.append(box, name);
       elements.decadeFilter.append(option);
+      return box;
+    };
+    const allYears = decadeOption("All years", "allYears", "");
+    allYears.addEventListener("change", () => {
+      decadeBoxes().forEach((box) => { box.checked = allYears.checked; });
+      updateAllYears();
+    });
+    const decades = [...new Set(data.photos.map(photoDecade).filter(Boolean))].sort();
+    decades.forEach((decade) => {
+      decadeOption(`${decade}s`, "decade", String(decade)).addEventListener("change", updateAllYears);
     });
 
     data.albums.forEach((album) => {
@@ -168,7 +188,7 @@
       card.append(cover, body);
       card.addEventListener("click", () => {
         clearSearch(true);
-        clearDecades();
+        resetDecades();
         activeAlbumId = album.id;
         shown = ALBUM_PAGE_SIZE;
         render();
@@ -192,9 +212,13 @@
         button.type = "button";
         button.className = "search-example-button";
         button.textContent = query;
+        // An example only fills the box; Search runs it, like everything else.
         button.addEventListener("click", () => {
           elements.semanticQuery.value = query;
-          elements.semanticForm.requestSubmit();
+          elements.semanticQuery.focus({ preventScroll: true });
+          elements.semanticField.scrollIntoView({ behavior: "smooth", block: "center" });
+          elements.semanticStatus.classList.remove("error");
+          elements.semanticStatus.textContent = `Click Search to look for “${query}”.`;
         });
         buttons.append(button);
       });
@@ -208,11 +232,7 @@
       filteredPhotos = searchPhotos;
       return;
     }
-    filteredPhotos = data.photos.filter((photo) => {
-      if (activeAlbumId && photo.album_id !== activeAlbumId) return false;
-      if (activeDecades.length && !activeDecades.includes(photoDecade(photo))) return false;
-      return true;
-    });
+    filteredPhotos = activeAlbumId ? data.photos.filter((photo) => photo.album_id === activeAlbumId) : [];
   }
 
   function renderHeading() {
@@ -225,6 +245,10 @@
       elements.albumLabel.textContent = "Search results";
       elements.photosHeading.textContent = "Photographs of this person";
       elements.description.textContent = searchDescription;
+    } else if (searchMode === "random") {
+      elements.albumLabel.textContent = "Search results";
+      elements.photosHeading.textContent = "A random selection";
+      elements.description.textContent = searchDescription;
     } else if (searchMode === "similar") {
       elements.albumLabel.textContent = "Search results";
       elements.photosHeading.textContent = "Similar photographs";
@@ -233,10 +257,6 @@
       elements.albumLabel.textContent = "Album";
       elements.photosHeading.textContent = album.title;
       elements.description.textContent = album.description;
-    } else if (activeDecades.length) {
-      elements.albumLabel.textContent = activeDecades.length > 1 ? "Decades" : "Decade";
-      elements.photosHeading.textContent = `${decadeLabel(activeDecades)} photographs`;
-      elements.description.textContent = "";
     } else {
       elements.albumLabel.textContent = "All albums";
       elements.photosHeading.textContent = "Photographs";
@@ -259,8 +279,8 @@
     renderHeading();
     renderPeriod();
     elements.resultsSection.classList.toggle("search-results", searchPhotos !== null);
-    // With nothing chosen there is no photo grid. Albums and decades are paged.
-    const nothingChosen = searchPhotos === null && !activeAlbumId && !activeDecades.length;
+    // With nothing chosen there is no photo grid. Only albums are paged.
+    const nothingChosen = searchPhotos === null && !activeAlbumId;
     elements.resultsSection.hidden = nothingChosen;
     const limit = nothingChosen ? 0 : (searchPhotos === null ? shown : filteredPhotos.length);
     elements.count.textContent = plural(filteredPhotos.length, "photograph");
@@ -318,7 +338,6 @@
     searchMode = mode;
     searchQuery = query || "";
     searchDescription = description;
-    shown = PAGE_SIZE;
     render();
     elements.photosHeading.scrollIntoView({ behavior: "smooth" });
   }
@@ -522,29 +541,31 @@
     event.preventDefault();
     // Search applies everything in the box: ticked decades and any words.
     const query = elements.semanticField.hidden ? "" : elements.semanticQuery.value.trim();
-    const decades = checkedDecades();
+    const ticked = checkedDecades();
     elements.semanticStatus.classList.remove("error");
-    if (!query && !decades.length) {
-      elements.semanticStatus.textContent = elements.semanticField.hidden
-        ? "Tick one or more decades, then click Search."
-        : "Tick a decade or describe a photograph, then click Search.";
+    if (!ticked.length) {
+      elements.semanticStatus.textContent = "Tick at least one decade, then click Search.";
       return;
     }
+    // All decades ticked means no year filter, which also keeps undated photos.
+    const decades = ticked.length === decadeBoxes().length ? [] : ticked;
+    const within = decades.length ? ` from the ${decadeLabel(decades)}` : "";
     activeAlbumId = "";
-    activeDecades = decades;
     if (!query) {
-      clearSearch(false);
-      shown = PAGE_SIZE;
-      render();
-      elements.semanticStatus.textContent = `${plural(filteredPhotos.length, "photograph")} from the ${decadeLabel(decades)}.`;
-      elements.photosHeading.scrollIntoView({ behavior: "smooth" });
+      const candidates = data.photos.filter((photo) => inDecades(photo, decades));
+      for (let index = candidates.length - 1; index > 0; index -= 1) {
+        const swap = Math.floor(Math.random() * (index + 1));
+        [candidates[index], candidates[swap]] = [candidates[swap], candidates[index]];
+      }
+      const sample = candidates.slice(0, SEARCH_LIMIT);
+      showSearchResults(sample, "random", "", "Click Search again for a different selection.");
+      elements.semanticStatus.textContent = `${plural(sample.length, "random photograph")}${within}.`;
       return;
     }
     elements.semanticSubmit.disabled = true;
     elements.semanticStatus.textContent = "Searching photographs…";
     try {
       const results = await requestTextSearch(query, decades);
-      const within = decades.length ? ` in the ${decadeLabel(decades)}` : "";
       showSearchResults(results, "text", query, "Ranked by visual similarity.");
       elements.semanticStatus.textContent = `${plural(results.length, "result")}${within}, ranked by visual similarity.`;
     } catch (error) {
@@ -564,7 +585,7 @@
     try {
       const results = await requestSimilar(photo.id);
       activeAlbumId = "";
-      clearDecades();
+      resetDecades();
       elements.viewer.close();
       showSearchResults(results, "similar", "", "Ranked by whole-photograph similarity.");
     } catch (error) {
@@ -582,7 +603,7 @@
     try {
       const results = await requestFaceSearch(faceId);
       activeAlbumId = "";
-      clearDecades();
+      resetDecades();
       elements.viewer.close();
       showSearchResults(results, "face", "", "Ranked by face similarity.");
     } catch (error) {
@@ -635,7 +656,7 @@
   });
 
   elements.clear.addEventListener("click", clearEverything);
-  elements.loadMore.addEventListener("click", () => { shown += activeAlbumId ? ALBUM_PAGE_SIZE : PAGE_SIZE; render(); });
+  elements.loadMore.addEventListener("click", () => { shown += ALBUM_PAGE_SIZE; render(); });
   elements.backToSearch.addEventListener("click", () => elements.controls.scrollIntoView({ behavior: "smooth" }));
   elements.openGuide.addEventListener("click", () => elements.guide.showModal());
   elements.closeGuide.addEventListener("click", () => elements.guide.close());
