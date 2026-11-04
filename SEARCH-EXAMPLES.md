@@ -22,14 +22,12 @@ gallery. Clicking an example runs it immediately.
 
 ## People doing things
 
-- `children in the snow`
-- `Christmas cookie decorating`
+- `cookie decorating`
 - `football`
 - `sports uniforms`
 - `guitar playing`
 - `woodworking`
 - `cooking outdoors`
-- `people swimming in a lake`
 
 ## Something specific
 

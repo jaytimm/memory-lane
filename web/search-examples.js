@@ -23,14 +23,12 @@ window.MEMORY_LANE_SEARCH_EXAMPLES = [
   {
     "title": "People doing things",
     "queries": [
-      "children in the snow",
-      "Christmas cookie decorating",
+      "cookie decorating",
       "football",
       "sports uniforms",
       "guitar playing",
       "woodworking",
-      "cooking outdoors",
-      "people swimming in a lake"
+      "cooking outdoors"
     ]
   },
   {
