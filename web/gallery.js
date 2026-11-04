@@ -246,7 +246,7 @@
       elements.description.textContent = searchDescription;
     } else if (searchMode === "face") {
       elements.albumLabel.textContent = "Search results";
-      elements.photosHeading.textContent = "Photographs of this person";
+      elements.photosHeading.textContent = "Photographs with similar faces";
       elements.description.textContent = searchDescription;
     } else if (searchMode === "random") {
       elements.albumLabel.textContent = "Search results";
@@ -611,7 +611,7 @@
     elements.findSimilar.disabled = true;
     elements.findFaces.disabled = true;
     elements.faceLayer.replaceChildren();
-    elements.viewerStatus.textContent = "Finding this person…";
+    elements.viewerStatus.textContent = "Finding similar faces…";
     try {
       const results = await requestFaceSearch(faceId);
       activeAlbumId = "";
