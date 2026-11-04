@@ -3,6 +3,9 @@
 
   const data = window.FAMILY_PHOTO_DATA;
   const PAGE_SIZE = 80;
+  // Albums show 100 photos at a time; searches show only their best matches.
+  const ALBUM_PAGE_SIZE = 100;
+  const SEARCH_LIMIT = 50;
   const albums = new Map(data.albums.map((album) => [album.id, album]));
   const photosById = new Map(data.photos.map((photo) => [photo.id, photo]));
   const elements = {
@@ -10,6 +13,8 @@
     hero: document.querySelector("#hero-strip"),
     controls: document.querySelector("#browse-controls"),
     semanticForm: document.querySelector("#semantic-search-form"),
+    semanticField: document.querySelector("#semantic-field"),
+    searchExamples: document.querySelector("#search-examples"),
     semanticQuery: document.querySelector("#semantic-query"),
     semanticSubmit: document.querySelector("#semantic-submit"),
     semanticStatus: document.querySelector("#semantic-status"),
@@ -18,11 +23,9 @@
     clear: document.querySelector("#clear-filters"),
     albumList: document.querySelector("#album-list"),
     resultsSection: document.querySelector("#photo-results"),
-    resultState: document.querySelector("#result-state"),
-    resultStateText: document.querySelector("#result-state-text"),
-    clearResultState: document.querySelector("#clear-result-state"),
     albumLabel: document.querySelector("#active-album-label"),
     photosHeading: document.querySelector("#photos-heading"),
+    period: document.querySelector("#active-period"),
     description: document.querySelector("#active-description"),
     count: document.querySelector("#result-count"),
     grid: document.querySelector("#photo-grid"),
@@ -47,7 +50,9 @@
   let shown = PAGE_SIZE;
   let viewerIndex = -1;
   let activeAlbumId = "";
-  let activeDecade = null;
+  // Decades applied by the last Search; the checkboxes may differ until then.
+  let activeDecades = [];
+  let readyText = "";
   let searchPhotos = null;
   let searchMode = null;
   let searchQuery = "";
@@ -74,31 +79,43 @@
     return `${number.toLocaleString()} ${word}${number === 1 ? "" : "s"}`;
   }
 
+  function photoDecade(photo) {
+    return photo.date_start ? Math.floor(photo.date_start / 10) * 10 : null;
+  }
+
+  function decadeLabel(decades) {
+    const names = decades.map((decade) => `${decade}s`);
+    return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
+  }
+
+  function checkedDecades() {
+    return [...elements.decadeFilter.querySelectorAll("input:checked")].map((box) => Number(box.value));
+  }
+
+  function clearDecades() {
+    activeDecades = [];
+    elements.decadeFilter.querySelectorAll("input").forEach((box) => { box.checked = false; });
+  }
+
   function clearSearch(clearInput = false) {
     searchPhotos = null;
     searchMode = null;
     searchQuery = "";
     searchDescription = "";
     if (clearInput) elements.semanticQuery.value = "";
-    elements.semanticStatus.textContent = "Search looks at the photographs themselves.";
+    elements.semanticStatus.textContent = readyText;
     elements.semanticStatus.classList.remove("error");
   }
 
+  // "Clear search" resets everything and returns to the search box.
   function clearEverything() {
     clearSearch(true);
+    clearDecades();
     activeAlbumId = "";
-    activeDecade = null;
     shown = PAGE_SIZE;
     render();
-  }
-
-  function chooseDecade(decade) {
-    clearSearch(true);
-    activeAlbumId = "";
-    activeDecade = decade;
-    shown = PAGE_SIZE;
-    render();
-    elements.photosHeading.scrollIntoView({ behavior: "smooth" });
+    elements.controls.scrollIntoView({ behavior: "smooth" });
+    if (!elements.semanticField.hidden) elements.semanticQuery.focus({ preventScroll: true });
   }
 
   function initializeFilters() {
@@ -112,27 +129,18 @@
       elements.hero.append(image);
     }
 
-    const allYears = document.createElement("button");
-    allYears.type = "button";
-    allYears.className = "decade-button";
-    allYears.dataset.decade = "";
-    allYears.textContent = "All years";
-    allYears.addEventListener("click", () => chooseDecade(null));
-    elements.decadeFilter.append(allYears);
-
-    const decades = [...new Set(
-      data.photos
-        .map((photo) => photo.date_start ? Math.floor(photo.date_start / 10) * 10 : null)
-        .filter(Boolean),
-    )].sort();
+    // Ticking a decade does nothing until Search is pressed.
+    const decades = [...new Set(data.photos.map(photoDecade).filter(Boolean))].sort();
     decades.forEach((decade) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "decade-button";
-      button.dataset.decade = String(decade);
-      button.textContent = `${decade}s`;
-      button.addEventListener("click", () => chooseDecade(decade));
-      elements.decadeFilter.append(button);
+      const option = document.createElement("label");
+      option.className = "decade-option";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.value = String(decade);
+      const name = document.createElement("span");
+      name.textContent = `${decade}s`;
+      option.append(box, name);
+      elements.decadeFilter.append(option);
     });
 
     data.albums.forEach((album) => {
@@ -160,9 +168,9 @@
       card.append(cover, body);
       card.addEventListener("click", () => {
         clearSearch(true);
+        clearDecades();
         activeAlbumId = album.id;
-        activeDecade = null;
-        shown = PAGE_SIZE;
+        shown = ALBUM_PAGE_SIZE;
         render();
         elements.photosHeading.scrollIntoView({ behavior: "smooth" });
       });
@@ -202,20 +210,9 @@
     }
     filteredPhotos = data.photos.filter((photo) => {
       if (activeAlbumId && photo.album_id !== activeAlbumId) return false;
-      if (activeDecade && (!photo.date_start || Math.floor(photo.date_start / 10) * 10 !== activeDecade)) return false;
+      if (activeDecades.length && !activeDecades.includes(photoDecade(photo))) return false;
       return true;
     });
-  }
-
-  function stateText() {
-    const album = albums.get(activeAlbumId);
-    const within = album ? ` within ${album.title}` : (activeDecade ? ` within the ${activeDecade}s` : "");
-    if (searchMode === "text") return `Searching for “${searchQuery}”${within}`;
-    if (searchMode === "face") return "Showing photographs of this person";
-    if (searchMode === "similar") return "Showing photographs similar to the selected photograph";
-    if (album) return `Showing photographs from ${album.title}`;
-    if (activeDecade) return `Showing photographs from the ${activeDecade}s`;
-    return "";
   }
 
   function renderHeading() {
@@ -236,9 +233,9 @@
       elements.albumLabel.textContent = "Album";
       elements.photosHeading.textContent = album.title;
       elements.description.textContent = album.description;
-    } else if (activeDecade) {
-      elements.albumLabel.textContent = "Decade";
-      elements.photosHeading.textContent = `${activeDecade}s photographs`;
+    } else if (activeDecades.length) {
+      elements.albumLabel.textContent = activeDecades.length > 1 ? "Decades" : "Decade";
+      elements.photosHeading.textContent = `${decadeLabel(activeDecades)} photographs`;
       elements.description.textContent = "";
     } else {
       elements.albumLabel.textContent = "All albums";
@@ -247,30 +244,35 @@
     }
   }
 
+  // Search results list the decades their photographs come from.
+  function renderPeriod() {
+    const decades = searchPhotos === null
+      ? []
+      : [...new Set(filteredPhotos.map(photoDecade).filter(Boolean))].sort();
+    elements.period.hidden = !decades.length;
+    elements.period.textContent = decades.length ? `From the ${decadeLabel(decades)}` : "";
+  }
+
   function render() {
     applyFilters();
     elements.grid.replaceChildren();
     renderHeading();
-    const currentState = stateText();
-    elements.resultState.hidden = !currentState;
-    elements.resultStateText.textContent = currentState;
+    renderPeriod();
     elements.resultsSection.classList.toggle("search-results", searchPhotos !== null);
+    // With nothing chosen there is no photo grid. Albums and decades are paged.
+    const nothingChosen = searchPhotos === null && !activeAlbumId && !activeDecades.length;
+    elements.resultsSection.hidden = nothingChosen;
+    const limit = nothingChosen ? 0 : (searchPhotos === null ? shown : filteredPhotos.length);
     elements.count.textContent = plural(filteredPhotos.length, "photograph");
     elements.empty.hidden = filteredPhotos.length !== 0;
-    elements.loadMore.hidden = shown >= filteredPhotos.length;
-    elements.backToSearch.hidden = !(currentState || shown > PAGE_SIZE);
+    elements.loadMore.hidden = limit >= filteredPhotos.length;
+    elements.backToSearch.hidden = nothingChosen;
 
     document.querySelectorAll(".album-card").forEach((card) => {
       card.classList.toggle("active", card.dataset.albumId === activeAlbumId);
     });
-    document.querySelectorAll(".decade-button").forEach((button) => {
-      button.classList.toggle(
-        "active",
-        button.dataset.decade === (activeDecade ? String(activeDecade) : ""),
-      );
-    });
 
-    filteredPhotos.slice(0, shown).forEach((photo, index) => {
+    filteredPhotos.slice(0, limit).forEach((photo, index) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "photo-card";
@@ -382,38 +384,33 @@
     return textEncoder;
   }
 
-  // Mirrors _candidate_indices in src/search.py.
-  function matchesSearchFilters(photo, album, dateFrom, dateTo) {
-    if (!photo) return false;
-    if (album && !(photo.album_id || "").toLowerCase().includes(album.toLowerCase())) return false;
-    const start = photo.date_start;
-    const end = photo.date_end || start;
-    if (dateFrom !== null && (end == null || end < dateFrom)) return false;
-    if (dateTo !== null && (start == null || start > dateTo)) return false;
-    return true;
+  // A photo belongs to the decade its album starts in, as in the decade view.
+  function inDecades(photo, decades) {
+    return Boolean(photo) && (!decades.length || decades.includes(photoDecade(photo)));
   }
 
-  async function requestTextSearch(query, album, dateFrom, dateTo) {
+  async function requestTextSearch(query, decades) {
     if (searchSource === "browser") {
       const [encoder, index] = await Promise.all([getTextEncoder(), getSimilarIndex()]);
       // Let the "Searching" message paint before the encoder holds the page.
       await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
       const vector = encoder.encode(query);
-      return index.search(vector, 100, (id) => matchesSearchFilters(photosById.get(id), album, dateFrom, dateTo));
+      return index.search(vector, SEARCH_LIMIT, (id) => inDecades(photosById.get(id), decades));
     }
+    // The server takes one year range; results outside the ticked decades are dropped.
     const payload = await postJson("/api/search", {
       query,
-      top_k: 100,
-      album,
-      date_from: dateFrom,
-      date_to: dateTo,
+      top_k: SEARCH_LIMIT,
+      album: null,
+      date_from: decades.length ? Math.min(...decades) : null,
+      date_to: decades.length ? Math.max(...decades) + 9 : null,
     }, "Search failed");
-    return payload.results;
+    return payload.results.filter((result) => inDecades(photosById.get(result.id), decades));
   }
 
   async function requestSimilar(photoId) {
-    if (searchSource === "browser") return (await getSimilarIndex()).similar(photoId, 100);
-    const payload = await postJson("/api/similar", { photo_id: photoId, top_k: 100 }, "Similar-photo search failed");
+    if (searchSource === "browser") return (await getSimilarIndex()).similar(photoId, SEARCH_LIMIT);
+    const payload = await postJson("/api/similar", { photo_id: photoId, top_k: SEARCH_LIMIT }, "Similar-photo search failed");
     return payload.results;
   }
 
@@ -425,9 +422,9 @@
 
   async function requestFaceSearch(faceId) {
     if (searchSource === "browser") {
-      return (await getFaceIndex()).search(faceId, 100, photosById);
+      return (await getFaceIndex()).search(faceId, SEARCH_LIMIT, photosById);
     }
-    const payload = await postJson("/api/face-search", { face_id: faceId, top_k: 100 }, "Face search failed");
+    const payload = await postJson("/api/face-search", { face_id: faceId, top_k: SEARCH_LIMIT }, "Face search failed");
     return payload.results;
   }
 
@@ -476,12 +473,13 @@
   // rather than making the first search wait for it.
   function enableBrowserTextSearch(photoCount) {
     const preparing = "Preparing search… this takes a few seconds.";
-    elements.semanticForm.hidden = false;
+    showTypedSearch();
     elements.semanticStatus.textContent = preparing;
     setTimeout(() => {
       Promise.all([getTextEncoder(), getSimilarIndex()]).then(() => {
+        readyText = `Ready to search ${photoCount.toLocaleString()} photographs.`;
         if (elements.semanticStatus.textContent === preparing) {
-          elements.semanticStatus.textContent = `Ready to search ${photoCount.toLocaleString()} photographs.`;
+          elements.semanticStatus.textContent = readyText;
         }
       }, () => {
         elements.semanticStatus.textContent = "Typed search could not be prepared on this computer.";
@@ -501,13 +499,19 @@
       imageSearchAvailable = true;
       faceSearchAvailable = Boolean(status.face_search);
       originalsAvailable = Boolean(status.originals_available);
-      elements.semanticForm.hidden = false;
+      showTypedSearch();
       if (status.face_search) showFaceCount(status.face_count);
-      elements.semanticStatus.textContent = `Ready to search ${status.photo_count.toLocaleString()} photographs.`;
+      readyText = `Ready to search ${status.photo_count.toLocaleString()} photographs.`;
+      elements.semanticStatus.textContent = readyText;
       return true;
     } catch (_) {
       return false;
     }
+  }
+
+  function showTypedSearch() {
+    elements.semanticField.hidden = false;
+    elements.searchExamples.hidden = false;
   }
 
   async function enableSemanticSearch() {
@@ -516,20 +520,33 @@
 
   elements.semanticForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const query = elements.semanticQuery.value.trim();
-    if (!query) return;
-    elements.semanticSubmit.disabled = true;
+    // Search applies everything in the box: ticked decades and any words.
+    const query = elements.semanticField.hidden ? "" : elements.semanticQuery.value.trim();
+    const decades = checkedDecades();
     elements.semanticStatus.classList.remove("error");
+    if (!query && !decades.length) {
+      elements.semanticStatus.textContent = elements.semanticField.hidden
+        ? "Tick one or more decades, then click Search."
+        : "Tick a decade or describe a photograph, then click Search.";
+      return;
+    }
+    activeAlbumId = "";
+    activeDecades = decades;
+    if (!query) {
+      clearSearch(false);
+      shown = PAGE_SIZE;
+      render();
+      elements.semanticStatus.textContent = `${plural(filteredPhotos.length, "photograph")} from the ${decadeLabel(decades)}.`;
+      elements.photosHeading.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    elements.semanticSubmit.disabled = true;
     elements.semanticStatus.textContent = "Searching photographs…";
     try {
-      const results = await requestTextSearch(
-        query,
-        activeAlbumId || null,
-        activeDecade,
-        activeDecade ? activeDecade + 9 : null,
-      );
+      const results = await requestTextSearch(query, decades);
+      const within = decades.length ? ` in the ${decadeLabel(decades)}` : "";
       showSearchResults(results, "text", query, "Ranked by visual similarity.");
-      elements.semanticStatus.textContent = `${plural(results.length, "result")} ranked by visual similarity.`;
+      elements.semanticStatus.textContent = `${plural(results.length, "result")}${within}, ranked by visual similarity.`;
     } catch (error) {
       elements.semanticStatus.textContent = error.message || "Search failed";
       elements.semanticStatus.classList.add("error");
@@ -547,7 +564,7 @@
     try {
       const results = await requestSimilar(photo.id);
       activeAlbumId = "";
-      activeDecade = null;
+      clearDecades();
       elements.viewer.close();
       showSearchResults(results, "similar", "", "Ranked by whole-photograph similarity.");
     } catch (error) {
@@ -565,7 +582,7 @@
     try {
       const results = await requestFaceSearch(faceId);
       activeAlbumId = "";
-      activeDecade = null;
+      clearDecades();
       elements.viewer.close();
       showSearchResults(results, "face", "", "Ranked by face similarity.");
     } catch (error) {
@@ -618,8 +635,7 @@
   });
 
   elements.clear.addEventListener("click", clearEverything);
-  elements.clearResultState.addEventListener("click", clearEverything);
-  elements.loadMore.addEventListener("click", () => { shown += PAGE_SIZE; render(); });
+  elements.loadMore.addEventListener("click", () => { shown += activeAlbumId ? ALBUM_PAGE_SIZE : PAGE_SIZE; render(); });
   elements.backToSearch.addEventListener("click", () => elements.controls.scrollIntoView({ behavior: "smooth" }));
   elements.openGuide.addEventListener("click", () => elements.guide.showModal());
   elements.closeGuide.addEventListener("click", () => elements.guide.close());

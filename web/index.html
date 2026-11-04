@@ -17,33 +17,33 @@
   </header>
 
   <main>
-    <section id="browse-controls" class="controls" aria-label="Browse photographs">
-      <form id="semantic-search-form" class="semantic-search" hidden>
-        <label>
-          <span>Search photographs</span>
-          <span class="search-input-row">
-            <input id="semantic-query" type="search" autocomplete="off" placeholder="Describe what is in the photo — for example, a parrot">
-            <button id="semantic-submit" type="submit">Search</button>
-          </span>
+    <section id="browse-controls" class="controls" aria-label="Search photographs">
+      <form id="semantic-search-form" class="semantic-search">
+        <div class="search-intro">
+          <div>
+            <p class="eyebrow">Three easy ways to begin</p>
+            <p>Choose decades, describe a photograph you remember, or pick an album below.</p>
+          </div>
+          <button id="open-guide" type="button" class="guide-button">How to use Memory Lane</button>
+        </div>
+        <fieldset class="decade-control">
+          <legend>Decades</legend>
+          <div id="decade-filter" class="decade-list"></div>
+        </fieldset>
+        <label id="semantic-field" class="semantic-field" hidden>
+          <span>Describe the photograph</span>
+          <input id="semantic-query" type="search" autocomplete="off" placeholder="For example, a parrot">
         </label>
-        <p id="semantic-status" class="semantic-status">Search looks at the photographs themselves.</p>
-        <details class="search-examples">
+        <div class="search-actions">
+          <button id="semantic-submit" type="submit" class="search-button">Search</button>
+          <button id="clear-filters" type="button" class="clear-button">Clear search</button>
+        </div>
+        <p id="semantic-status" class="semantic-status" role="status"></p>
+        <details id="search-examples" class="search-examples" hidden>
           <summary>Not sure what to search for? See examples</summary>
           <div id="search-example-groups" class="search-example-groups"></div>
         </details>
       </form>
-      <div class="browse-intro">
-        <div>
-          <p class="eyebrow">Three easy ways to begin</p>
-          <p>Choose an album below, choose a decade, or describe a photograph you remember.</p>
-        </div>
-        <button id="open-guide" type="button" class="guide-button">How to use Memory Lane</button>
-      </div>
-      <div class="decade-control" aria-labelledby="decade-label">
-        <span id="decade-label">Browse by decade</span>
-        <div id="decade-filter" class="decade-list"></div>
-      </div>
-      <button id="clear-filters" type="button" class="quiet-button">Show all photographs</button>
     </section>
 
     <section aria-labelledby="albums-heading">
@@ -57,14 +57,11 @@
     </section>
 
     <section id="photo-results" class="photo-results" aria-labelledby="photos-heading">
-      <div id="result-state" class="result-state" hidden>
-        <strong id="result-state-text"></strong>
-        <button id="clear-result-state" type="button">Clear search and filters</button>
-      </div>
       <div class="section-heading photo-heading">
         <div>
           <p class="eyebrow" id="active-album-label">All albums</p>
           <h2 id="photos-heading">Photographs</h2>
+          <p id="active-period" class="album-description" hidden></p>
           <p id="active-description" class="album-description"></p>
         </div>
         <p id="result-count" class="result-count"></p>
@@ -82,13 +79,13 @@
     <h2>How to use Memory Lane</h2>
     <ol class="guide-steps">
       <li><strong>Browse an album.</strong><span>Click an album picture. Its photographs will appear below.</span></li>
-      <li><strong>Browse by decade.</strong><span>Click a decade near the top. Click <b>All years</b> when you are finished.</span></li>
-      <li><strong>Search for something you remember.</strong><span>Type a short description such as <b>yellow tents</b>, <b>hugs</b>, or <b>two smiling faces</b>.</span></li>
+      <li><strong>Choose decades.</strong><span>Tick one or more decades at the top, then click <b>Search</b>.</span></li>
+      <li><strong>Search for something you remember.</strong><span>Type a short description such as <b>yellow tents</b>, <b>hugs</b>, or <b>two smiling faces</b>, then click <b>Search</b>. Ticked decades narrow the search.</span></li>
       <li><strong>See search ideas.</strong><span>Open the examples below the search box and click any example to run it.</span></li>
       <li><strong>Open a photograph.</strong><span>Click it to enlarge it. Use the left and right arrows to move through the results.</span></li>
       <li><strong>Find related photographs.</strong><span>Open a photograph and choose <b>Find similar photos</b> or <b>Find this person</b>.</span></li>
       <li><strong>Open, copy, or save the original.</strong><span>Choose <b>Go to original</b> to fit the full-resolution photograph to your screen, or right-click it and use your browser’s normal <b>Copy image</b> or <b>Save image as</b> command.</span></li>
-      <li><strong>Start over.</strong><span>Click <b>Show all photographs</b> or <b>Clear search and filters</b>.</span></li>
+      <li><strong>Start over.</strong><span>Click <b>Clear search</b> to go back to the search box.</span></li>
     </ol>
   </dialog>
 
