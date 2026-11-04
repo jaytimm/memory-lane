@@ -112,7 +112,6 @@ h2 { margin-bottom: 0; font: 500 clamp(1.8rem, 3vw, 2.6rem)/1 Georgia, serif; }
   text-transform: uppercase;
 }
 .semantic-field input { min-width: 0; border-color: transparent; }
-.field-hint { color: #e4ece9; font-weight: 500; letter-spacing: 0; text-transform: none; }
 .search-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .search-button, .clear-button {
   min-height: 46px;
