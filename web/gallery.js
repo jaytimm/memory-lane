@@ -52,6 +52,7 @@
   let viewerIndex = -1;
   let activeAlbumId = "";
   let readyText = "";
+  let pendingExample = null;
   // Decades used by the last random selection, for "Show different photographs".
   let randomDecades = [];
   let searchPhotos = null;
@@ -103,6 +104,20 @@
     const ticked = checkedDecades().length;
     allYears.checked = ticked === decadeBoxes().length;
     allYears.indeterminate = ticked > 0 && !allYears.checked;
+    if (pendingExample) showPendingExample();
+  }
+
+  // After an example fills the box, say what Search will do, including the
+  // ticked decades, and keep that current as boxes change.
+  function showPendingExample() {
+    const ticked = checkedDecades();
+    elements.semanticStatus.classList.remove("error");
+    if (!ticked.length) {
+      elements.semanticStatus.textContent = "Tick at least one decade, then click Search.";
+      return;
+    }
+    const period = ticked.length === decadeBoxes().length ? "in all years" : `from the ${decadeLabel(ticked)}`;
+    elements.semanticStatus.textContent = `Click Search to look for “${pendingExample}” ${period}.`;
   }
 
   function resetDecades() {
@@ -111,6 +126,7 @@
   }
 
   function clearSearch(clearInput = false) {
+    pendingExample = null;
     searchPhotos = null;
     searchMode = null;
     searchQuery = "";
@@ -220,8 +236,8 @@
           elements.semanticQuery.value = query;
           elements.semanticQuery.focus({ preventScroll: true });
           elements.semanticField.scrollIntoView({ behavior: "smooth", block: "center" });
-          elements.semanticStatus.classList.remove("error");
-          elements.semanticStatus.textContent = `Click Search to look for “${query}”.`;
+          pendingExample = query;
+          showPendingExample();
         });
         buttons.append(button);
       });
@@ -559,6 +575,7 @@
   elements.semanticForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     // Search applies everything in the box: ticked decades and any words.
+    pendingExample = null;
     const query = elements.semanticField.hidden ? "" : elements.semanticQuery.value.trim();
     const ticked = checkedDecades();
     elements.semanticStatus.classList.remove("error");
