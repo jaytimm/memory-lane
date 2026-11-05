@@ -131,14 +131,14 @@ h2 { margin-bottom: 0; font: 500 clamp(1.8rem, 3vw, 2.6rem)/1 Georgia, serif; }
 .semantic-status.error { color: #ffb6a5; }
 
 .search-examples { grid-column: 1 / -1; border-top: 1px solid rgb(255 255 255 / 18%); padding-top: 14px; }
-.search-examples summary {
-  width: fit-content;
-  color: white;
-  cursor: pointer;
-  font-weight: 750;
-  list-style-position: outside;
+.search-examples-title {
+  margin: 0;
+  color: #f0ad8f;
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
-.search-examples summary:hover { color: #f0ad8f; }
 .search-example-groups {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

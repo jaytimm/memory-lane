@@ -31,7 +31,7 @@
           <div id="decade-filter" class="decade-list"></div>
         </fieldset>
         <label id="semantic-field" class="semantic-field" hidden>
-          <span>Describe the photograph</span>
+          <span>What’s in the photo?</span>
           <input id="semantic-query" type="search" autocomplete="off" placeholder="For example, a parrot (or leave empty for a random selection)">
         </label>
         <div class="search-actions">
@@ -39,10 +39,10 @@
           <button id="clear-filters" type="button" class="clear-button">Clear search</button>
         </div>
         <p id="semantic-status" class="semantic-status" role="status"></p>
-        <details id="search-examples" class="search-examples" hidden>
-          <summary>Not sure what to search for? See examples</summary>
+        <section id="search-examples" class="search-examples" aria-labelledby="search-examples-title" hidden>
+          <p id="search-examples-title" class="search-examples-title">Ideas to try</p>
           <div id="search-example-groups" class="search-example-groups"></div>
-        </details>
+        </section>
       </form>
     </section>
 
@@ -83,7 +83,7 @@
       <li><strong>Search for something you remember.</strong><span>Type a short description such as <b>yellow tents</b>, <b>hugs</b>, or <b>two smiling faces</b>, then click <b>Search</b>. You will see the 50 closest matches.</span></li>
       <li><strong>See a random selection.</strong><span>Leave the description empty and click <b>Search</b> to see 50 random photographs. Click it again for a different selection.</span></li>
       <li><strong>Narrow by decade.</strong><span>Every decade starts ticked. Untick <b>All years</b>, tick the decades you want, then click <b>Search</b>.</span></li>
-      <li><strong>See search ideas.</strong><span>Open the examples below the search box. Clicking one puts it in the search box; then click <b>Search</b>.</span></li>
+      <li><strong>Use an idea.</strong><span>Click one of the <b>Ideas to try</b> below the search box to put it in the box, then click <b>Search</b>.</span></li>
       <li><strong>Open a photograph.</strong><span>Click it to enlarge it. Use the left and right arrows to move through the results.</span></li>
       <li><strong>Find related photographs.</strong><span>Open a photograph and choose <b>Find similar photos</b> or <b>Find similar faces</b>.</span></li>
       <li><strong>What search can and can’t do.</strong><span>Memory Lane doesn’t know anyone’s name, so searching for “Grandma” or “Joe” won’t work. Every search works by how things look. <b>Typed search</b> finds photographs that look like your words, such as <b>birthday cake</b> or <b>people at a lake</b>. <b>Find similar photos</b> finds photographs that look like the one you opened. <b>Find similar faces</b> finds faces that look like the one you chose; it can include relatives who resemble each other and miss the same person at a very different age.</span></li>
