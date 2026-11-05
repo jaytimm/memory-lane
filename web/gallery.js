@@ -275,7 +275,8 @@
     } else if (album) {
       elements.albumLabel.textContent = "Album";
       elements.photosHeading.textContent = album.title;
-      elements.description.textContent = album.description;
+      // The spreadsheet often has no space after semicolons.
+      elements.description.textContent = album.description.replace(/\s*;\s*/g, "; ").trim();
     } else {
       elements.albumLabel.textContent = "All albums";
       elements.photosHeading.textContent = "Photographs";

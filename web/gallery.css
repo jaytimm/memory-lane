@@ -243,7 +243,7 @@ input, select, .quiet-button, .load-more {
 .album-card-body { display: block; padding: 16px 17px 18px; }
 .album-card strong { display: block; font: 600 1.22rem Georgia, serif; }
 .album-card-count { display: block; margin-top: 5px; color: var(--accent); font-size: .78rem; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; }
-.album-card-note { display: -webkit-box; margin-top: 9px; overflow: hidden; color: var(--muted); font-size: .86rem; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.album-card-note { display: -webkit-box; margin-top: 9px; overflow: hidden; color: var(--muted); font-size: .86rem; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 
 .photo-results { margin-top: 30px; padding: 0; border-radius: 16px; transition: background .2s ease, padding .2s ease; }
 .photo-results.search-results {
