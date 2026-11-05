@@ -81,6 +81,16 @@
     return `${number.toLocaleString()} ${word}${number === 1 ? "" : "s"}`;
   }
 
+  // Spreadsheet descriptions often lack the space after a semicolon or comma.
+  // Number commas such as 1,000 are left alone.
+  function tidyDescription(text) {
+    return (text || "")
+      .replace(/\s*([;,])\s*/g, "$1 ")
+      .replace(/(\d), (\d{3})\b/g, "$1,$2")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function photoDecade(photo) {
     return photo.date_start ? Math.floor(photo.date_start / 10) * 10 : null;
   }
@@ -202,7 +212,7 @@
       details.textContent = plural(album.actual_count, "photo");
       const note = document.createElement("span");
       note.className = "album-card-note";
-      note.textContent = album.description ? album.description.replaceAll(";", " · ") : "Open this album";
+      note.textContent = album.description ? tidyDescription(album.description) : "Open this album";
       body.append(title, details, note);
       card.append(cover, body);
       card.addEventListener("click", () => {
@@ -275,8 +285,7 @@
     } else if (album) {
       elements.albumLabel.textContent = "Album";
       elements.photosHeading.textContent = album.title;
-      // The spreadsheet often has no space after semicolons.
-      elements.description.textContent = album.description.replace(/\s*;\s*/g, "; ").trim();
+      elements.description.textContent = tidyDescription(album.description);
     } else {
       elements.albumLabel.textContent = "All albums";
       elements.photosHeading.textContent = "Photographs";
